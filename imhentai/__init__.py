@@ -38,13 +38,19 @@ CATEGORY_URL = {
     "characters": ("characters", "character"),
 }
 
+# デフォルトDBパス（app.py / ラッパー関数用）
+_ROOT = Path(__file__).parent.parent
+DB_PATH = str(_ROOT / "data" / "imhentai.db")
+
 
 # ──────────────────────────────────────────────
 # Database
 # ──────────────────────────────────────────────
 
-def init_db(db_path: str) -> sqlite3.Connection:
+def init_db(db_path: str = None) -> sqlite3.Connection:
     """SQLiteデータベースを初期化しテーブルを作成する"""
+    if db_path is None:
+        db_path = DB_PATH
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -712,3 +718,261 @@ def upload_to_gdrive(file_path: str, folder_id: str = "",
     except Exception as e:
         logger.error(f"[GDrive] Upload failed: {e}")
         return ""
+
+
+# ──────────────────────────────────────────────
+# Site Search
+# ──────────────────────────────────────────────
+
+def _parse_thumb_cards(soup) -> list:
+    """div.thumb カードをパースしてギャラリー情報リストを返す"""
+    cards = []
+    for thumb in soup.select("div.thumb"):
+        a = thumb.select_one("div.inner_thumb a")
+        img = thumb.select_one("div.inner_thumb img.lazy")
+        caption = thumb.select_one("div.caption h3 a, h3.caption a, .caption a")
+        if not a or not img:
+            continue
+        href = a.get("href", "")
+        m = re.search(r"/gallery/(\d+)/", href)
+        if not m:
+            continue
+        gid = int(m.group(1))
+        title = img.get("alt", "") or (caption.get_text(strip=True) if caption else f"Gallery {gid}")
+        thumb_url = img.get("data-src", "") or img.get("src", "")
+        cards.append({
+            "id": gid,
+            "title": title,
+            "thumb_url": thumb_url,
+            "url": f"{BASE_URL}/gallery/{gid}/",
+        })
+    return cards
+
+
+def search_site(session: requests.Session, keyword: str, page: int = 1) -> list:
+    """imhentaiサイト内キーワード検索。返値: [{id, title, thumb_url, url}, ...]"""
+    url = f"{BASE_URL}/?s={requests.utils.quote(keyword)}&page={page}"
+    try:
+        resp = rate_limited_get(session, url, 0.5, 1.0)
+        soup = BeautifulSoup(resp.text, "lxml")
+        results = _parse_thumb_cards(soup)
+        logger.info(f"Site search '{keyword}' p{page}: {len(results)} results")
+        return results
+    except Exception as e:
+        logger.error(f"Site search failed: {e}")
+        return []
+
+
+def search_category_site(session: requests.Session, category: str, slug: str, page: int = 1) -> list:
+    """カテゴリページのギャラリー一覧取得。category: tag/artist/group/parody/character"""
+    url = f"{BASE_URL}/{category}/{slug}/?page={page}"
+    try:
+        resp = rate_limited_get(session, url, 0.5, 1.0)
+        soup = BeautifulSoup(resp.text, "lxml")
+        results = _parse_thumb_cards(soup)
+        logger.info(f"Category {category}/{slug} p{page}: {len(results)} results")
+        return results
+    except Exception as e:
+        logger.error(f"Category search failed: {e}")
+        return []
+
+
+# ══════════════════════════════════════════════════════════
+# app.py / FastAPI向け ラッパー関数群
+# ══════════════════════════════════════════════════════════
+
+def _make_session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": BASE_URL,
+    })
+    return s
+
+
+def search_site(keyword: str, page: int = 1) -> list:
+    """imhentaiサイト内キーワード検索（引数なし版）"""
+    s = _make_session()
+    url = f"{BASE_URL}/?s={requests.utils.quote(keyword)}&page={page}"
+    try:
+        resp = rate_limited_get(s, url, 0.5, 1.0)
+        soup = BeautifulSoup(resp.text, "lxml")
+        results = _parse_thumb_cards(soup)
+        logger.info(f"Site search '{keyword}' p{page}: {len(results)} results")
+        return results
+    except Exception as e:
+        logger.error(f"Site search failed: {e}")
+        return []
+
+
+def search_category_site(category: str, slug: str, page: int = 1) -> list:
+    """カテゴリページのギャラリー一覧取得（引数なし版）"""
+    s = _make_session()
+    url = f"{BASE_URL}/{category}/{slug}/?page={page}"
+    try:
+        resp = rate_limited_get(s, url, 0.5, 1.0)
+        soup = BeautifulSoup(resp.text, "lxml")
+        results = _parse_thumb_cards(soup)
+        logger.info(f"Category {category}/{slug} p{page}: {len(results)} results")
+        return results
+    except Exception as e:
+        logger.error(f"Category search failed: {e}")
+        return []
+
+
+def search_db(query: str) -> list:
+    """DBのfuzzy検索（引数なし版、タグ/アーティスト/グループ/キャラ/パロディ）"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    results = []
+    q_like = f"%{query}%"
+
+    table_map = [
+        ("artists",    "artist"),
+        ("tags",       "tag"),
+        ("groups",     "group"),
+        ("characters", "character"),
+        ("parodies",   "parody"),
+    ]
+
+    for table, type_label in table_map:
+        try:
+            rows = conn.execute(
+                f"SELECT name, url, count FROM {table} WHERE name LIKE ? ORDER BY count DESC LIMIT 5",
+                (q_like,)
+            ).fetchall()
+            for r in rows:
+                slug = r["url"].rstrip("/").split("/")[-1] if r["url"] else r["name"]
+                results.append({
+                    "type": type_label,
+                    "name": r["name"],
+                    "slug": slug,
+                    "count": r["count"] or 0,
+                })
+        except Exception:
+            pass
+
+    if not results:
+        # fuzzy fallback
+        for table, type_label in table_map:
+            try:
+                all_names = [r[0] for r in conn.execute(f"SELECT name FROM {table}").fetchall()]
+                matches = difflib.get_close_matches(query, all_names, n=3, cutoff=0.5)
+                for m in matches:
+                    row = conn.execute(
+                        f"SELECT name, url, count FROM {table} WHERE name=?", (m,)
+                    ).fetchone()
+                    if row:
+                        slug = row["url"].rstrip("/").split("/")[-1] if row["url"] else row["name"]
+                        results.append({
+                            "type": type_label,
+                            "name": row["name"],
+                            "slug": slug,
+                            "count": row["count"] or 0,
+                        })
+            except Exception:
+                pass
+
+    conn.close()
+    return results
+
+
+def download_gallery(gallery_id: int, fmt: str = "ZIP", workers: int = 8,
+                     skip_if_exists: bool = True) -> dict:
+    """ギャラリーをDL（app.py用統合ラッパー）"""
+    import time
+    s = _make_session()
+    output_dir = str(Path(__file__).parent.parent / "downloads")
+
+    if skip_if_exists:
+        existing = Path(output_dir) / f"{gallery_id}.{fmt.lower()}"
+        if existing.exists():
+            return {"status": "skipped", "path": str(existing)}
+
+    t0 = time.time()
+    if fmt.upper() == "PDF":
+        path = download_gallery_pdf(s, gallery_id, output_dir, workers=workers)
+    else:
+        path = download_gallery_zip(s, gallery_id, output_dir, workers=workers)
+
+    elapsed = round(time.time() - t0, 1)
+    size = Path(path).stat().st_size if Path(path).exists() else 0
+
+    # DB記録
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        info = get_gallery_info(s, gallery_id)
+        conn.execute(
+            """INSERT OR REPLACE INTO galleries
+               (id, title, url, pages, downloaded, file_path, artist)
+               VALUES (?,?,?,?,1,?,?)""",
+            (gallery_id,
+             info.get("title", f"Gallery {gallery_id}"),
+             f"{BASE_URL}/gallery/{gallery_id}/",
+             info.get("pages", 0),
+             path,
+             info.get("artist", ""))
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"DB record failed: {e}")
+
+    return {
+        "status": "done",
+        "path": path,
+        "size_bytes": size,
+        "size_mb": round(size / 1e6, 1),
+        "elapsed_s": elapsed,
+        "fmt": fmt,
+    }
+
+
+def get_db_stats() -> dict:
+    """DB統計情報"""
+    conn = sqlite3.connect(DB_PATH)
+    stats = {}
+    for tbl in ("galleries", "artists", "tags", "groups", "parodies", "characters"):
+        try:
+            stats[tbl] = conn.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
+        except Exception:
+            stats[tbl] = 0
+    try:
+        stats["downloads"] = conn.execute(
+            "SELECT COUNT(*) FROM galleries WHERE downloaded=1"
+        ).fetchone()[0]
+    except Exception:
+        stats["downloads"] = 0
+    conn.close()
+    return stats
+
+
+def get_download_history(limit: int = 100) -> list:
+    """ダウンロード済みギャラリー一覧"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            """SELECT id as gallery_id, title, file_path,
+                      CASE WHEN file_path LIKE '%.pdf' THEN 'PDF' ELSE 'ZIP' END as fmt,
+                      pages,
+                      NULL as size_bytes,
+                      datetime('now','localtime') as downloaded_at
+               FROM galleries WHERE downloaded=1
+               ORDER BY id DESC LIMIT ?""",
+            (limit,)
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            # ファイルサイズ取得
+            if d["file_path"] and Path(d["file_path"]).exists():
+                d["size_bytes"] = Path(d["file_path"]).stat().st_size
+            result.append(d)
+        conn.close()
+        return result
+    except Exception as e:
+        conn.close()
+        logger.error(f"get_download_history: {e}")
+        return []
