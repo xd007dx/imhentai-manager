@@ -24,8 +24,9 @@
 html,body { height:100%; font-family:'Segoe UI','Noto Sans JP',sans-serif; background:var(--dark); color:var(--text); }
 body::before {
   content:''; position:fixed; inset:0;
-  background:url('/static/bg.png') center/cover no-repeat;
-  opacity:.13; pointer-events:none; z-index:0;
+  background:url('/static/bg.png') center top/contain no-repeat;
+  background-attachment: fixed;
+  opacity:.07; pointer-events:none; z-index:0;
 }
 body>*{ position:relative; z-index:1; }
 
@@ -77,6 +78,9 @@ textarea { resize:vertical; }
 .gcard:hover { transform:translateY(-3px); box-shadow:0 6px 24px rgba(255,45,120,.35); z-index:10; }
 .gcard img.thumb { width:100%; aspect-ratio:2/3; object-fit:cover; display:block; border-radius:8px 8px 0 0; }
 .gcard-title { padding:4px 6px; font-size:.7rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gcard-meta { padding:3px 5px; display:flex; gap:3px; flex-wrap:wrap; }
+.lang-badge { font-size:.62rem; background:rgba(45,170,255,.18); color:#6dd; border-radius:4px; padding:1px 4px; }
+.cat-badge  { font-size:.62rem; background:rgba(255,45,120,.15); color:var(--pink2); border-radius:4px; padding:1px 4px; }
 .dl-btn { display:block; width:100%; padding:5px 4px; background:rgba(255,45,120,.15); border:none; border-top:1px solid var(--border); color:var(--pink2); cursor:pointer; font-size:.75rem; font-weight:600; transition:background .15s; border-radius:0 0 8px 8px; }
 .dl-btn:hover { background:rgba(255,45,120,.4); color:#fff; }
 .dl-btn.queued  { background:rgba(255,200,0,.15); color:#ffd700; }
@@ -439,8 +443,14 @@ function makeGalleryGrid(items) {
     const st    = jobStatuses[String(id)] || '';
     const btnCls= st ? `dl-btn ${st}` : 'dl-btn';
     const btnTxt= { queued:'⏳ キュー待ち', running:'⬇ ダウンロード中', done:'✅ 完了', error:'❌ エラー' }[st] || '⬇ DL';
+    // 言語バッジ
+    const langs = (g.languages || []);
+    const langBadges = langs.map(l => `<span class="lang-badge">${esc(l)}</span>`).join('');
+    // カテゴリバッジ
+    const catBadge = g.category ? `<span class="cat-badge">${esc(g.category)}</span>` : '';
     return `<div class="gcard" data-id="${id}" data-thumb="${thumb}" data-title="${escAttr(g.title||'')}">
       <img class="thumb" src="${thumb}" alt="${title}" loading="lazy" onerror="this.style.visibility='hidden'"/>
+      <div class="gcard-meta">${langBadges}${catBadge}</div>
       <div class="gcard-title">${title}</div>
       <button class="${btnCls}" onclick="quickDl(${id},this)">${btnTxt}</button>
     </div>`;

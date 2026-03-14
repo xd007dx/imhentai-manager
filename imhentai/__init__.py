@@ -726,6 +726,11 @@ def upload_to_gdrive(file_path: str, folder_id: str = "",
 
 def _parse_thumb_cards(soup) -> list:
     """div.thumb カードをパースしてギャラリー情報リストを返す"""
+    LANG_MAP = {
+        "1": "🇯🇵 JP", "2": "🇺🇸 EN", "3": "🌐 TL",
+        "4": "🇩🇪 DE", "5": "🇫🇷 FR", "6": "🇪🇸 ES",
+        "7": "🇨🇳 ZH", "8": "🇰🇷 KR",
+    }
     cards = []
     for thumb in soup.select("div.thumb"):
         a = thumb.select_one("div.inner_thumb a")
@@ -740,11 +745,22 @@ def _parse_thumb_cards(soup) -> list:
         gid = int(m.group(1))
         title = img.get("alt", "") or (caption.get_text(strip=True) if caption else f"Gallery {gid}")
         thumb_url = img.get("data-src", "") or img.get("src", "")
+
+        # 言語情報
+        lang_ids = thumb.get("data-languages", "").split()
+        langs = [LANG_MAP.get(lid, lid) for lid in lang_ids if lid]
+
+        # カテゴリ情報（div内のcat_flagなど）
+        cat_el = thumb.select_one(".thumb_cat")
+        category = cat_el.get_text(strip=True) if cat_el else ""
+
         cards.append({
             "id": gid,
             "title": title,
             "thumb_url": thumb_url,
             "url": f"{BASE_URL}/gallery/{gid}/",
+            "languages": langs,
+            "category": category,
         })
     return cards
 
