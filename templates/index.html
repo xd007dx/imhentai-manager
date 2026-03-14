@@ -5,342 +5,154 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>📚 imhentai-manager</title>
 <style>
-/* ──── Reset & Base ──── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
 :root {
-  --pink:    #ff2d78;
-  --pink2:   #ff6bab;
-  --dark:    #0d0d1a;
-  --dark2:   #13132b;
-  --dark3:   #1a1a35;
-  --card:    rgba(13,13,26,.85);
-  --border:  rgba(255,45,120,.25);
-  --text:    #f0e0f0;
-  --muted:   #9090b0;
-  --radius:  10px;
-  --shadow:  0 4px 24px rgba(255,45,120,.18);
+  --pink:   #ff2d78;
+  --pink2:  #ff6bab;
+  --dark:   #0d0d1a;
+  --dark2:  #13132b;
+  --dark3:  #1a1a35;
+  --card:   rgba(13,13,26,.88);
+  --border: rgba(255,45,120,.25);
+  --text:   #f0e0f0;
+  --muted:  #9090b0;
+  --green:  #2dff78;
+  --red:    #ff4444;
+  --radius: 10px;
+  --shadow: 0 4px 24px rgba(255,45,120,.18);
 }
-
-html, body {
-  height: 100%;
-  font-family: 'Segoe UI', 'Noto Sans JP', sans-serif;
-  background: var(--dark);
-  color: var(--text);
-}
-
-/* ──── Background ──── */
+html,body { height:100%; font-family:'Segoe UI','Noto Sans JP',sans-serif; background:var(--dark); color:var(--text); }
 body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: url('/static/bg.png') center/cover no-repeat;
-  opacity: .13;
-  pointer-events: none;
-  z-index: 0;
+  content:''; position:fixed; inset:0;
+  background:url('/static/bg.png') center/cover no-repeat;
+  opacity:.13; pointer-events:none; z-index:0;
 }
-body > * { position: relative; z-index: 1; }
+body>*{ position:relative; z-index:1; }
 
-/* ──── Header ──── */
-header {
-  text-align: center;
-  padding: 28px 16px 16px;
-  border-bottom: 1px solid var(--border);
-  background: rgba(13,13,26,.7);
-  backdrop-filter: blur(8px);
-}
-header h1 {
-  font-size: clamp(1.4rem, 4vw, 2.2rem);
-  color: var(--pink);
-  letter-spacing: .04em;
-  text-shadow: 0 0 20px rgba(255,45,120,.5);
-}
-header p { color: var(--muted); font-size: .9rem; margin-top: 4px; }
+/* ── Header ── */
+header { text-align:center; padding:24px 16px 14px; border-bottom:1px solid var(--border); background:rgba(13,13,26,.75); backdrop-filter:blur(8px); }
+header h1 { font-size:clamp(1.4rem,4vw,2.1rem); color:var(--pink); text-shadow:0 0 20px rgba(255,45,120,.5); }
+header p  { color:var(--muted); font-size:.88rem; margin-top:3px; }
 
-/* ──── Tabs ──── */
-.tabs {
-  display: flex;
-  gap: 4px;
-  padding: 10px 16px 0;
-  background: rgba(13,13,26,.8);
-  border-bottom: 1px solid var(--border);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.tab-btn {
-  padding: 9px 20px;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: var(--radius) var(--radius) 0 0;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: .9rem;
-  white-space: nowrap;
-  transition: all .2s;
-}
-.tab-btn:hover { color: var(--pink2); border-color: var(--border); }
-.tab-btn.active {
-  background: var(--dark3);
-  color: var(--pink);
-  border-color: var(--border);
-  font-weight: 600;
-}
+/* ── Tabs ── */
+.tabs { display:flex; gap:4px; padding:10px 16px 0; background:rgba(13,13,26,.8); border-bottom:1px solid var(--border); overflow-x:auto; scrollbar-width:none; }
+.tab-btn { padding:8px 18px; border:1px solid transparent; border-bottom:none; border-radius:var(--radius) var(--radius) 0 0; background:transparent; color:var(--muted); cursor:pointer; font-size:.88rem; white-space:nowrap; transition:all .2s; }
+.tab-btn:hover { color:var(--pink2); border-color:var(--border); }
+.tab-btn.active { background:var(--dark3); color:var(--pink); border-color:var(--border); font-weight:600; }
 
-/* ──── Tab Content ──── */
-.tab-panel { display: none; padding: 20px 16px; }
-.tab-panel.active { display: block; }
+/* ── Panels ── */
+.tab-panel { display:none; padding:18px 16px; max-width:1400px; margin:0 auto; }
+.tab-panel.active { display:block; }
 
-/* ──── Cards ──── */
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  backdrop-filter: blur(6px);
-  box-shadow: var(--shadow);
-}
-.card + .card { margin-top: 14px; }
+/* ── Cards ── */
+.card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; backdrop-filter:blur(6px); box-shadow:var(--shadow); }
+.card+.card { margin-top:14px; }
 
-/* ──── Form elements ──── */
-label { display: block; font-size: .8rem; color: var(--pink2); margin-bottom: 5px; font-weight: 600; letter-spacing: .05em; }
+/* ── Form ── */
+label { display:block; font-size:.78rem; color:var(--pink2); margin-bottom:4px; font-weight:700; letter-spacing:.05em; }
+input[type=text],input[type=number],select,textarea { width:100%; padding:8px 12px; background:rgba(255,255,255,.06); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-size:.93rem; outline:none; transition:border-color .2s; }
+input:focus,select:focus,textarea:focus { border-color:var(--pink); box-shadow:0 0 0 2px rgba(255,45,120,.2); }
+textarea { resize:vertical; }
+.row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+.row>*{ flex:1; min-width:120px; }
 
-input[type=text], input[type=number], select, textarea {
-  width: 100%;
-  padding: 9px 13px;
-  background: rgba(255,255,255,.06);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-size: .95rem;
-  outline: none;
-  transition: border-color .2s;
-}
-input:focus, select:focus, textarea:focus { border-color: var(--pink); box-shadow: 0 0 0 2px rgba(255,45,120,.2); }
-textarea { resize: vertical; }
+/* ── Buttons ── */
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:5px; padding:8px 18px; border:none; border-radius:var(--radius); cursor:pointer; font-size:.9rem; font-weight:600; transition:all .18s; white-space:nowrap; }
+.btn-primary { background:linear-gradient(135deg,var(--pink),#c4006c); color:#fff; box-shadow:0 2px 12px rgba(255,45,120,.4); }
+.btn-primary:hover { filter:brightness(1.15); transform:translateY(-1px); }
+.btn-sm { padding:5px 12px; font-size:.8rem; }
+.btn-ghost { background:transparent; border:1px solid var(--border); color:var(--muted); }
+.btn-ghost:hover { border-color:var(--pink2); color:var(--pink2); }
+.btn-green { background:rgba(45,255,120,.15); border:1px solid rgba(45,255,120,.3); color:var(--green); }
+.btn-green:hover { background:rgba(45,255,120,.3); }
+.btn:disabled { opacity:.4; cursor:not-allowed; transform:none !important; }
 
-.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-.row > * { flex: 1; min-width: 140px; }
+/* ── Search layout ── */
+.search-layout { display:grid; grid-template-columns:1fr 300px; gap:14px; margin-top:14px; }
+@media(max-width:800px){ .search-layout { grid-template-columns:1fr; } }
 
-/* ──── Buttons ──── */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 9px 20px;
-  border: none;
-  border-radius: var(--radius);
-  cursor: pointer;
-  font-size: .92rem;
-  font-weight: 600;
-  transition: all .2s;
-  white-space: nowrap;
-}
-.btn-primary {
-  background: linear-gradient(135deg, var(--pink), #d4006c);
-  color: #fff;
-  box-shadow: 0 2px 12px rgba(255,45,120,.4);
-}
-.btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); }
-.btn-sm { padding: 6px 14px; font-size: .82rem; }
-.btn-ghost {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--muted);
-}
-.btn-ghost:hover { border-color: var(--pink2); color: var(--pink2); }
-.btn:disabled { opacity: .45; cursor: not-allowed; transform: none !important; }
+/* ── Gallery Grid ── */
+.gallery-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; margin-top:12px; }
+.gcard { position:relative; border-radius:8px; overflow:visible; background:var(--dark3); border:1px solid var(--border); transition:transform .18s,box-shadow .18s; }
+.gcard:hover { transform:translateY(-3px); box-shadow:0 6px 24px rgba(255,45,120,.35); z-index:10; }
+.gcard img.thumb { width:100%; aspect-ratio:2/3; object-fit:cover; display:block; border-radius:8px 8px 0 0; }
+.gcard-title { padding:4px 6px; font-size:.7rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dl-btn { display:block; width:100%; padding:5px 4px; background:rgba(255,45,120,.15); border:none; border-top:1px solid var(--border); color:var(--pink2); cursor:pointer; font-size:.75rem; font-weight:600; transition:background .15s; border-radius:0 0 8px 8px; }
+.dl-btn:hover { background:rgba(255,45,120,.4); color:#fff; }
+.dl-btn.queued  { background:rgba(255,200,0,.15); color:#ffd700; }
+.dl-btn.running { background:rgba(255,100,0,.2); color:#ffa040; }
+.dl-btn.done    { background:rgba(45,255,120,.15); color:var(--green); }
+.dl-btn.error   { background:rgba(255,68,68,.15); color:var(--red); }
 
-/* ──── Search layout ──── */
-.search-layout {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 16px;
-}
-@media (max-width: 800px) {
-  .search-layout { grid-template-columns: 1fr; }
-}
+/* ── Hover Popup ── */
+#hover-popup { display:none; position:fixed; z-index:9999; pointer-events:none; width:200px;
+  background:var(--dark2); border:1px solid var(--pink); border-radius:10px; padding:10px;
+  box-shadow:0 8px 32px rgba(255,45,120,.4); }
+#hover-popup img { width:100%; border-radius:6px; }
+#popup-id  { font-size:.7rem; color:var(--pink2); margin-top:6px; }
+#popup-ttl { font-size:.76rem; color:var(--text); margin-top:2px; line-height:1.3; }
 
-/* ──── Gallery Grid ──── */
-.gallery-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-.gcard {
-  position: relative;
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--dark3);
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition: transform .18s, box-shadow .18s;
-}
-.gcard:hover { transform: translateY(-3px); box-shadow: 0 6px 24px rgba(255,45,120,.35); }
-.gcard img {
-  width: 100%;
-  aspect-ratio: 2/3;
-  object-fit: cover;
-  display: block;
-}
-.gcard-info {
-  padding: 6px 8px;
-  font-size: .72rem;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.gcard-title { font-size: .73rem; color: var(--text); }
+/* ── DB Results ── */
+.db-results { display:flex; flex-direction:column; gap:6px; margin-top:10px; max-height:70vh; overflow-y:auto; }
+.db-item { display:flex; justify-content:space-between; align-items:center; padding:7px 10px; background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:8px; cursor:pointer; transition:background .15s,border-color .15s; gap:6px; }
+.db-item:hover { background:rgba(255,45,120,.1); border-color:var(--pink); }
+.db-item.selected { background:rgba(255,45,120,.18); border-color:var(--pink); }
+.db-item-label { font-size:.83rem; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.db-item-meta { display:flex; gap:4px; align-items:center; flex-shrink:0; }
+.db-badge { background:rgba(255,45,120,.2); color:var(--pink2); border-radius:20px; padding:1px 7px; font-size:.7rem; font-weight:700; }
 
-/* ──── Hover popup ──── */
-.gcard .popup {
-  display: none;
-  position: fixed;
-  z-index: 999;
-  width: 220px;
-  background: var(--dark2);
-  border: 1px solid var(--pink);
-  border-radius: var(--radius);
-  padding: 10px;
-  box-shadow: 0 8px 32px rgba(255,45,120,.4);
-  pointer-events: none;
-}
-.gcard:hover .popup { display: block; }
-.gcard .popup img { width: 100%; border-radius: 6px; }
-.gcard .popup .pop-title { margin-top: 8px; font-size: .8rem; color: var(--text); }
-.gcard .popup .pop-id { font-size: .72rem; color: var(--pink2); margin-top: 4px; }
+/* ── Pagination ── */
+.pagination { display:flex; align-items:center; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.page-info { font-size:.83rem; color:var(--muted); }
 
-.dl-btn {
-  display: block;
-  width: 100%;
-  padding: 4px;
-  background: rgba(255,45,120,.15);
-  border: none;
-  border-top: 1px solid var(--border);
-  color: var(--pink2);
-  cursor: pointer;
-  font-size: .75rem;
-  transition: background .2s;
-}
-.dl-btn:hover { background: rgba(255,45,120,.3); color: #fff; }
+/* ── Queue Panel ── */
+.queue-panel { position:fixed; bottom:0; right:0; width:340px; max-height:50vh; background:var(--dark2); border:1px solid var(--border); border-radius:12px 0 0 0; overflow:hidden; z-index:500; transition:transform .3s; }
+.queue-panel.collapsed { transform:translateY(calc(100% - 42px)); }
+.queue-header { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:rgba(255,45,120,.1); border-bottom:1px solid var(--border); cursor:pointer; }
+.queue-header-title { font-size:.85rem; font-weight:700; color:var(--pink2); }
+.queue-body { overflow-y:auto; max-height:calc(50vh - 42px); }
+.queue-item { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid rgba(255,255,255,.05); font-size:.78rem; }
+.queue-item-gid { color:var(--pink2); font-weight:700; min-width:60px; }
+.queue-item-status { flex:1; }
+.q-status-queued  { color:#ffd700; }
+.q-status-running { color:#ffa040; }
+.q-status-done    { color:var(--green); }
+.q-status-error   { color:var(--red); }
 
-/* ──── DB results panel ──── */
-.db-results { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.db-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: rgba(255,255,255,.04);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background .15s, border-color .15s;
-  gap: 8px;
-}
-.db-item:hover { background: rgba(255,45,120,.1); border-color: var(--pink); }
-.db-item.selected { background: rgba(255,45,120,.18); border-color: var(--pink); }
-.db-item-label { font-size: .85rem; color: var(--text); }
-.db-item-meta { font-size: .75rem; color: var(--muted); text-align: right; white-space: nowrap; }
-.db-badge {
-  background: rgba(255,45,120,.2);
-  color: var(--pink2);
-  border-radius: 20px;
-  padding: 2px 8px;
-  font-size: .72rem;
-  font-weight: 600;
-}
+/* ── Status box ── */
+.status-box { margin-top:10px; padding:10px 14px; background:rgba(0,0,0,.3); border-radius:8px; border:1px solid var(--border); font-size:.83rem; min-height:40px; white-space:pre-wrap; word-break:break-all; }
+.s-ok  { border-color:var(--green); color:#7fff9a; }
+.s-err { border-color:var(--red);   color:#ff9090; }
+.s-run { border-color:var(--pink);  color:var(--pink2); }
 
-/* ──── Pagination ──── */
-.pagination {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-}
-.page-info { font-size: .85rem; color: var(--muted); padding: 6px 12px; }
+/* ── Stats ── */
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:10px; margin-top:10px; }
+.stat-card { background:rgba(255,45,120,.08); border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center; }
+.stat-num { font-size:1.4rem; font-weight:700; color:var(--pink); }
+.stat-lbl { font-size:.7rem; color:var(--muted); margin-top:2px; }
 
-/* ──── Status / Log ──── */
-.status-box {
-  margin-top: 12px;
-  padding: 10px 14px;
-  background: rgba(0,0,0,.3);
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  font-size: .85rem;
-  min-height: 48px;
-  color: var(--text);
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-.status-ok   { border-color: #2dff78; color: #7fff9a; }
-.status-err  { border-color: #ff4444; color: #ff9090; }
-.status-run  { border-color: var(--pink); color: var(--pink2); }
+/* ── History table ── */
+.hist-wrap { overflow-x:auto; margin-top:10px; }
+.hist-table { width:100%; border-collapse:collapse; font-size:.8rem; }
+.hist-table th { background:rgba(255,45,120,.12); color:var(--pink2); padding:8px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+.hist-table td { padding:6px 8px; border-bottom:1px solid rgba(255,255,255,.05); vertical-align:middle; }
+.hist-table tr:hover td { background:rgba(255,45,120,.06); }
+.hist-table td:last-child { white-space:nowrap; }
 
-/* ──── Stats grid ──── */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 10px;
-  margin-top: 10px;
-}
-.stat-card {
-  background: rgba(255,45,120,.08);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px;
-  text-align: center;
-}
-.stat-num { font-size: 1.5rem; font-weight: 700; color: var(--pink); }
-.stat-lbl { font-size: .72rem; color: var(--muted); margin-top: 3px; }
-
-/* ──── History table ──── */
-.hist-table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 10px; }
-.hist-table th { background: rgba(255,45,120,.12); color: var(--pink2); padding: 8px; text-align: left; border-bottom: 1px solid var(--border); }
-.hist-table td { padding: 7px 8px; border-bottom: 1px solid rgba(255,255,255,.05); vertical-align: middle; }
-.hist-table tr:hover td { background: rgba(255,45,120,.06); }
-
-/* ──── Spinner ──── */
-.spinner {
-  display: inline-block;
-  width: 16px; height: 16px;
-  border: 2px solid var(--border);
-  border-top-color: var(--pink);
-  border-radius: 50%;
-  animation: spin .7s linear infinite;
-  vertical-align: middle;
-  margin-right: 6px;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ──── Section title ──── */
-.sec-title {
-  font-size: .78rem;
-  color: var(--pink2);
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  margin-bottom: 10px;
-  border-left: 3px solid var(--pink);
-  padding-left: 8px;
-}
-
-/* ──── Scrollbar ──── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: var(--pink); }
-
-/* ──── Mobile ──── */
-@media (max-width: 600px) {
-  header { padding: 18px 10px 12px; }
-  .tab-btn { padding: 8px 12px; font-size: .82rem; }
-  .tab-panel { padding: 14px 10px; }
-  .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+/* ── Misc ── */
+.sec-title { font-size:.76rem; color:var(--pink2); font-weight:700; letter-spacing:.08em; text-transform:uppercase; margin-bottom:10px; border-left:3px solid var(--pink); padding-left:8px; }
+.spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--border); border-top-color:var(--pink); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:4px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:99px; }
+::-webkit-scrollbar-thumb:hover { background:var(--pink); }
+@media(max-width:600px){
+  header { padding:14px 10px 10px; }
+  .tab-btn { padding:7px 10px; font-size:.8rem; }
+  .tab-panel { padding:12px 8px; }
+  .gallery-grid { grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); }
+  .queue-panel { width:100%; border-radius:12px 12px 0 0; }
 }
 </style>
 </head>
@@ -351,492 +163,529 @@ textarea { resize: vertical; }
   <p>imhentai.xxx の検索・ダウンロード管理ツール</p>
 </header>
 
-<!-- ──── Tabs ──── -->
 <nav class="tabs">
-  <button class="tab-btn active" onclick="showTab('search')">🔍 検索</button>
-  <button class="tab-btn" onclick="showTab('manual')">⬇️ マニュアルDL</button>
-  <button class="tab-btn" onclick="showTab('db')">🗄️ DB管理</button>
-  <button class="tab-btn" onclick="showTab('history')">📋 履歴</button>
+  <button class="tab-btn active" onclick="showTab('search',this)">🔍 検索</button>
+  <button class="tab-btn" onclick="showTab('manual',this)">⬇️ マニュアルDL</button>
+  <button class="tab-btn" onclick="showTab('db',this)">🗄️ DB管理</button>
+  <button class="tab-btn" onclick="showTab('history',this)">📋 履歴</button>
 </nav>
 
-<!-- ════════════════════════════════════════
-     TAB 1: 検索
-════════════════════════════════════════ -->
+<!-- ════ TAB 1: 検索 ════ -->
 <section id="tab-search" class="tab-panel active">
-
-  <!-- 検索バー -->
   <div class="card">
-    <div class="row" style="gap:8px;">
-      <div style="flex:1;min-width:200px;">
+    <div class="row">
+      <div style="flex:1;min-width:180px;">
         <label>🔍 検索ワード</label>
         <input id="search-input" type="text" placeholder="例: lolicon, Kariya, futanari…" autocomplete="off"/>
       </div>
-      <div style="flex:0;min-width:auto;">
+      <div style="flex:0;">
         <label>&nbsp;</label>
         <button class="btn btn-primary" onclick="doSearch(1)">🔍 検索</button>
       </div>
     </div>
-    <div class="row" style="margin-top:12px;">
-      <div>
+    <div class="row" style="margin-top:10px;">
+      <div style="max-width:140px;">
         <label>DL形式</label>
-        <select id="dl-fmt">
-          <option value="ZIP">ZIP</option>
-          <option value="PDF">PDF</option>
-        </select>
+        <select id="dl-fmt"><option>ZIP</option><option>PDF</option></select>
       </div>
-      <div>
+      <div style="max-width:100px;">
         <label>⚡ 並列数</label>
-        <input id="dl-workers" type="number" min="1" max="16" value="8" style="width:80px;"/>
+        <input id="dl-workers" type="number" min="1" max="16" value="8"/>
       </div>
     </div>
   </div>
 
-  <!-- 検索結果レイアウト -->
-  <div class="search-layout" style="margin-top:14px;">
-
+  <div class="search-layout">
     <!-- 左: サイト検索 -->
     <div>
-      <div class="card" style="min-height:200px;">
-        <div class="sec-title">🌐 サイト検索結果</div>
-        <div id="site-results">
-          <div style="color:var(--muted);text-align:center;padding:40px 0;">検索してください</div>
-        </div>
+      <div class="card">
+        <div class="sec-title">🌐 サイト検索結果 <span id="site-mode-label" style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;"></span></div>
+        <div id="site-results"><div style="color:var(--muted);text-align:center;padding:40px;">検索してください</div></div>
         <div class="pagination" id="site-pagination" style="display:none;">
-          <button class="btn btn-ghost btn-sm" id="prev-btn" onclick="doSearch(currentPage-1)">◀ 前</button>
+          <button class="btn btn-ghost btn-sm" onclick="goPrev()">◀ 前</button>
           <span class="page-info" id="page-info">1 ページ</span>
-          <button class="btn btn-ghost btn-sm" id="next-btn" onclick="doSearch(currentPage+1)">次 ▶</button>
+          <button class="btn btn-ghost btn-sm" onclick="goNext()">次 ▶</button>
         </div>
-      </div>
-      <!-- DL実行エリア -->
-      <div class="card" style="margin-top:12px;">
-        <div class="sec-title">⬇️ ダウンロード</div>
-        <div class="row" style="gap:8px;">
-          <div style="flex:1;">
-            <label>ギャラリーID（サムネのDLボタンで自動入力）</label>
-            <input id="dl-gid" type="text" placeholder="例: 1607100" autocomplete="off"/>
-          </div>
-          <div style="flex:0;min-width:auto;">
-            <label>&nbsp;</label>
-            <button class="btn btn-primary" onclick="startDownload()">⬇ DL実行</button>
-          </div>
-        </div>
-        <div id="dl-status" class="status-box" style="display:none;"></div>
       </div>
     </div>
 
     <!-- 右: DB検索 -->
     <div>
-      <div class="card" style="min-height:200px;">
+      <div class="card" style="position:sticky;top:10px;">
         <div class="sec-title">🗄️ DB検索結果</div>
-        <div id="db-results">
-          <div style="color:var(--muted);text-align:center;padding:40px 0;">検索後に表示</div>
-        </div>
+        <div id="db-results"><div style="color:var(--muted);text-align:center;padding:30px 0;">検索後に表示</div></div>
       </div>
     </div>
-
   </div>
 </section>
 
-<!-- ════════════════════════════════════════
-     TAB 2: マニュアルDL
-════════════════════════════════════════ -->
+<!-- ════ TAB 2: マニュアルDL ════ -->
 <section id="tab-manual" class="tab-panel">
   <div class="card">
     <div class="sec-title">⬇️ マニュアルダウンロード</div>
     <div class="row">
-      <div>
-        <label>ギャラリーID</label>
-        <input id="m-gid" type="text" placeholder="例: 1607100"/>
-      </div>
-      <div>
-        <label>DL形式</label>
-        <select id="m-fmt">
-          <option>ZIP</option>
-          <option>PDF</option>
-        </select>
-      </div>
-      <div>
-        <label>並列数</label>
-        <input id="m-workers" type="number" min="1" max="16" value="8" style="width:80px;"/>
-      </div>
-      <div style="display:flex;align-items:flex-end;">
-        <button class="btn btn-primary" onclick="manualDownload()">⬇ ダウンロード</button>
+      <div><label>ギャラリーID</label><input id="m-gid" type="text" placeholder="例: 1607100"/></div>
+      <div style="max-width:120px;"><label>形式</label><select id="m-fmt"><option>ZIP</option><option>PDF</option></select></div>
+      <div style="max-width:90px;"><label>並列数</label><input id="m-workers" type="number" min="1" max="16" value="8"/></div>
+      <div style="flex:0;">
+        <label>&nbsp;</label>
+        <button class="btn btn-primary" onclick="manualDownload()">⬇ キューに追加</button>
       </div>
     </div>
-    <div style="margin-top:10px;">
-      <label><input type="checkbox" id="m-skip" checked style="width:auto;margin-right:6px;"/>既にDL済みはスキップ</label>
+    <div style="margin-top:8px;">
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+        <input type="checkbox" id="m-skip" checked style="width:auto;"/> DL済みはスキップ
+      </label>
     </div>
     <div id="m-status" class="status-box" style="display:none;"></div>
   </div>
 </section>
 
-<!-- ════════════════════════════════════════
-     TAB 3: DB管理
-════════════════════════════════════════ -->
+<!-- ════ TAB 3: DB管理 ════ -->
 <section id="tab-db" class="tab-panel">
-
-  <!-- Stats -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div class="sec-title" style="margin:0;">📊 DB統計</div>
       <button class="btn btn-ghost btn-sm" onclick="loadStats()">🔄 更新</button>
     </div>
-    <div id="stats-area" class="stats-grid">
-      <div style="color:var(--muted);padding:10px;">ロード中...</div>
-    </div>
+    <div id="stats-area" class="stats-grid"></div>
   </div>
 
-  <!-- Scrape -->
   <div class="card">
     <div class="sec-title">🕷️ スクレイピング</div>
-    <div class="row">
-      <div>
-        <label>並列数</label>
-        <input id="scrape-workers" type="number" min="1" max="16" value="8" style="width:80px;"/>
-      </div>
+    <div class="row" style="margin-bottom:12px;">
+      <div style="max-width:90px;"><label>並列数</label><input id="scrape-workers" type="number" min="1" max="16" value="8"/></div>
     </div>
-    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn btn-primary btn-sm" onclick="startScrape(['artists'])">Artists</button>
       <button class="btn btn-primary btn-sm" onclick="startScrape(['tags'])">Tags</button>
       <button class="btn btn-primary btn-sm" onclick="startScrape(['groups'])">Groups</button>
       <button class="btn btn-primary btn-sm" onclick="startScrape(['parodies'])">Parodies</button>
       <button class="btn btn-primary btn-sm" onclick="startScrape(['characters'])">Characters</button>
-      <button class="btn btn-ghost btn-sm" onclick="startScrape(['artists','tags','groups','parodies','characters'])">🔄 全て</button>
+      <button class="btn btn-ghost btn-sm"   onclick="startScrape(['artists','tags','groups','parodies','characters'])">🔄 全て</button>
     </div>
     <div id="scrape-status" class="status-box" style="display:none;"></div>
   </div>
 
-  <!-- Export -->
   <div class="card">
     <div class="sec-title">📤 エクスポート</div>
     <a href="/api/db/export" download class="btn btn-ghost">💾 JSON ダウンロード</a>
   </div>
 </section>
 
-<!-- ════════════════════════════════════════
-     TAB 4: 履歴
-════════════════════════════════════════ -->
+<!-- ════ TAB 4: 履歴 ════ -->
 <section id="tab-history" class="tab-panel">
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <div class="sec-title" style="margin:0;">📋 ダウンロード履歴</div>
       <button class="btn btn-ghost btn-sm" onclick="loadHistory()">🔄 更新</button>
     </div>
-    <div id="history-area">
-      <div style="color:var(--muted);">ロード中...</div>
-    </div>
+    <div id="history-area"><div style="color:var(--muted);">ロード中…</div></div>
   </div>
 </section>
 
-<!-- ──── Popup overlay (hover) ──── -->
-<div id="hover-popup" style="display:none;position:fixed;z-index:9999;pointer-events:none;
-     width:200px;background:var(--dark2);border:1px solid var(--pink);border-radius:10px;
-     padding:10px;box-shadow:0 8px 32px rgba(255,45,120,.4);">
-  <img id="popup-img" src="" style="width:100%;border-radius:6px;"/>
-  <div id="popup-id"  style="font-size:.72rem;color:var(--pink2);margin-top:6px;"></div>
-  <div id="popup-ttl" style="font-size:.78rem;color:var(--text);margin-top:3px;"></div>
+<!-- ════ ダウンロードキューパネル（常時表示） ════ -->
+<div class="queue-panel collapsed" id="queue-panel">
+  <div class="queue-header" onclick="toggleQueue()">
+    <span class="queue-header-title">⬇️ ダウンロードキュー</span>
+    <span id="queue-badge" style="font-size:.75rem;color:var(--muted);">空</span>
+  </div>
+  <div class="queue-body" id="queue-body"></div>
 </div>
 
-<!-- ════════════════════════════════════════
-     JavaScript
-════════════════════════════════════════ -->
+<!-- ── Hover Popup ── -->
+<div id="hover-popup">
+  <img id="popup-img" src="" alt=""/>
+  <div id="popup-id"></div>
+  <div id="popup-ttl"></div>
+</div>
+
 <script>
-// ────────────────────────────────────────
+// ══════════════════════════════════════
+// State
+// ══════════════════════════════════════
+let currentPage = 1;
+let currentQuery = '';
+let currentMode  = 'site';  // 'site' | 'category'
+let currentCat   = '';
+let currentSlug  = '';
+let jobStatuses  = {};       // gid -> status ('queued'|'running'|'done'|'error')
+
+// ══════════════════════════════════════
 // Tabs
-// ────────────────────────────────────────
-function showTab(name) {
+// ══════════════════════════════════════
+function showTab(name, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  event.target.classList.add('active');
-  if (name === 'db') loadStats();
+  if (btn) btn.classList.add('active');
+  if (name === 'db')      loadStats();
   if (name === 'history') loadHistory();
 }
 
-// ────────────────────────────────────────
+// ══════════════════════════════════════
 // Search
-// ────────────────────────────────────────
-let currentPage = 1;
-let currentQuery = '';
-
-document.getElementById('search-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') doSearch(1);
-});
+// ══════════════════════════════════════
+document.getElementById('search-input').addEventListener('keydown', e => { if(e.key==='Enter') doSearch(1); });
 
 async function doSearch(page) {
   const q = document.getElementById('search-input').value.trim();
   if (!q) return;
   currentQuery = q;
-  currentPage = page < 1 ? 1 : page;
+  currentPage  = Math.max(1, page);
+  currentMode  = 'site';
+  currentCat = currentSlug = '';
 
-  setHtml('site-results', spinner() + ' 検索中…');
-  setHtml('db-results', spinner() + ' DB検索中…');
-  document.getElementById('site-pagination').style.display = 'none';
+  document.getElementById('site-mode-label').textContent = '';
+  setHtml('site-results', spin() + ' 検索中…');
+  setHtml('db-results',   spin() + ' DB検索中…');
+  hidePagination();
 
-  // 並列実行
   const [siteRes, dbRes] = await Promise.all([
-    fetch(`/api/search/site?q=${encodeURIComponent(q)}&page=${currentPage}`).then(r=>r.json()).catch(()=>null),
-    fetch(`/api/search/db?q=${encodeURIComponent(q)}`).then(r=>r.json()).catch(()=>null),
+    apiFetch(`/api/search/site?q=${enc(q)}&page=${currentPage}`),
+    apiFetch(`/api/search/db?q=${enc(q)}`),
   ]);
 
-  // サイト検索結果
-  if (siteRes && siteRes.results && siteRes.results.length > 0) {
-    setHtml('site-results', renderGalleryGrid(siteRes.results));
-    document.getElementById('site-pagination').style.display = 'flex';
-    document.getElementById('page-info').textContent = currentPage + ' ページ';
-    document.getElementById('prev-btn').disabled = currentPage <= 1;
-    attachHoverPopup();
-  } else {
-    setHtml('site-results', '<div style="color:var(--muted);text-align:center;padding:40px 0;">結果がありません</div>');
-  }
-
-  // DB検索結果
-  if (dbRes && dbRes.results && dbRes.results.length > 0) {
-    setHtml('db-results', renderDbResults(dbRes.results));
-  } else {
-    setHtml('db-results', '<div style="color:var(--muted);text-align:center;padding:40px 0;">DB内に一致なし</div>');
-  }
+  renderSiteResults(siteRes);
+  renderDbResults(dbRes);
 }
 
-function renderGalleryGrid(items) {
-  return '<div class="gallery-grid">' + items.map(g => {
-    const title = escHtml(g.title || '');
-    const id = g.id || 0;
-    const thumb = g.thumb_url || '';
-    return `<div class="gcard"
-      data-id="${id}" data-thumb="${escAttr(thumb)}" data-title="${escAttr(g.title||'')}">
-      <img src="${escAttr(thumb)}" alt="${escAttr(g.title||'')}" loading="lazy"
-           onerror="this.style.visibility='hidden'"/>
-      <div class="gcard-title gcard-info">${title}</div>
-      <button class="dl-btn" onclick="setDlGid(${id})">⬇ DL (${id})</button>
-    </div>`;
-  }).join('') + '</div>';
+async function goPrev() {
+  if (currentPage <= 1) return;
+  currentPage--;
+  await fetchCurrentPage();
+}
+async function goNext() {
+  currentPage++;
+  await fetchCurrentPage();
 }
 
-function renderDbResults(items) {
-  return '<div class="db-results">' + items.map((r,i) => {
-    const type = r.type || '';
-    const name = r.name || r.slug || '';
+async function fetchCurrentPage() {
+  hidePagination();
+  setHtml('site-results', spin() + ' ロード中…');
+  let res;
+  if (currentMode === 'category') {
+    res = await apiFetch(`/api/search/category?cat=${enc(currentCat)}&slug=${enc(currentSlug)}&page=${currentPage}`);
+  } else {
+    res = await apiFetch(`/api/search/site?q=${enc(currentQuery)}&page=${currentPage}`);
+  }
+  renderSiteResults(res);
+}
+
+function renderSiteResults(res) {
+  if (!res || !res.results || res.results.length === 0) {
+    setHtml('site-results', '<div style="color:var(--muted);text-align:center;padding:40px;">結果がありません</div>');
+    return;
+  }
+  setHtml('site-results', makeGalleryGrid(res.results));
+  document.getElementById('site-pagination').style.display = 'flex';
+  document.getElementById('page-info').textContent = currentPage + ' ページ';
+  document.getElementById('prev-btn') && (document.getElementById('prev-btn').disabled = currentPage <= 1);
+  attachHover();
+  refreshDlBtnStates();
+}
+
+function renderDbResults(res) {
+  if (!res || !res.results || res.results.length === 0) {
+    setHtml('db-results', '<div style="color:var(--muted);text-align:center;padding:30px 0;">DB内に一致なし</div>');
+    return;
+  }
+  const html = '<div class="db-results">' + res.results.map(r => {
+    const name = esc(r.name || '');
+    const slug = escAttr(r.slug || r.name || '');
+    const type = esc(r.type || '');
     const count = r.count || '';
-    return `<div class="db-item" onclick="loadCategoryGalleries('${escAttr(type)}','${escAttr(r.slug||name)}',this)">
-      <span class="db-item-label">${escHtml(name)}</span>
+    return `<div class="db-item" onclick="loadCatGalleries('${escAttr(r.type)}','${slug}',this)">
+      <span class="db-item-label">${name}</span>
       <span class="db-item-meta">
-        <span class="db-badge">${escHtml(type)}</span>
-        ${count ? '<span style="margin-left:4px;color:var(--muted);">'+count+'件</span>' : ''}
+        <span class="db-badge">${type}</span>
+        ${count ? `<span style="color:var(--muted);font-size:.72rem;">${count}件</span>` : ''}
       </span>
     </div>`;
   }).join('') + '</div>';
+  setHtml('db-results', html);
 }
 
-async function loadCategoryGalleries(cat, slug, el) {
-  document.querySelectorAll('.db-item').forEach(e=>e.classList.remove('selected'));
+async function loadCatGalleries(cat, slug, el) {
+  document.querySelectorAll('.db-item').forEach(e => e.classList.remove('selected'));
   if (el) el.classList.add('selected');
 
-  setHtml('site-results', spinner() + ` ${cat}/${slug} を取得中…`);
-  document.getElementById('site-pagination').style.display = 'none';
+  currentMode = 'category';
+  currentCat  = cat;
+  currentSlug = slug;
+  currentPage = 1;
 
-  const res = await fetch(`/api/search/category?cat=${encodeURIComponent(cat)}&slug=${encodeURIComponent(slug)}&page=1`)
-    .then(r=>r.json()).catch(()=>null);
+  // カテゴリURL修正: DBのtype(artist/tag/group/parody/character)はそのまま単数形で使う
+  // 複数形が来た場合だけ単数に戻す
+  const catMap = { artists:'artist', tags:'tag', groups:'group', parodies:'parody', characters:'character' };
+  currentCat = catMap[cat] || cat;
 
-  if (res && res.results && res.results.length > 0) {
-    setHtml('site-results', renderGalleryGrid(res.results));
-    document.getElementById('site-pagination').style.display = 'flex';
-    document.getElementById('page-info').textContent = '1 ページ';
-    attachHoverPopup();
-  } else {
-    setHtml('site-results', '<div style="color:var(--muted);text-align:center;padding:40px 0;">結果なし</div>');
-  }
+  document.getElementById('site-mode-label').textContent = `— ${cat}: ${slug}`;
+  setHtml('site-results', spin() + ` ${cat}/${slug} を取得中…`);
+  hidePagination();
+
+  const res = await apiFetch(`/api/search/category?cat=${enc(currentCat)}&slug=${enc(slug)}&page=1`);
+  renderSiteResults(res);
 }
 
-// ────────────────────────────────────────
-// Hover Popup
-// ────────────────────────────────────────
-function attachHoverPopup() {
-  const popup = document.getElementById('hover-popup');
-  document.querySelectorAll('.gcard').forEach(card => {
-    card.addEventListener('mouseenter', e => {
-      const thumb = card.dataset.thumb;
-      const id    = card.dataset.id;
-      const title = card.dataset.title;
-      document.getElementById('popup-img').src = thumb;
-      document.getElementById('popup-id').textContent  = 'ID: ' + id;
-      document.getElementById('popup-ttl').textContent = title;
-      popup.style.display = 'block';
-      positionPopup(e);
-    });
-    card.addEventListener('mousemove', positionPopup);
-    card.addEventListener('mouseleave', () => { popup.style.display = 'none'; });
-  });
-}
-function positionPopup(e) {
-  const popup = document.getElementById('hover-popup');
-  const x = e.clientX + 12;
-  const y = e.clientY + 12;
-  const pw = popup.offsetWidth + 20;
-  const ph = popup.offsetHeight + 20;
-  popup.style.left = (x + pw > window.innerWidth  ? x - pw - 4 : x) + 'px';
-  popup.style.top  = (y + ph > window.innerHeight ? y - ph - 4 : y) + 'px';
+// ══════════════════════════════════════
+// Gallery HTML
+// ══════════════════════════════════════
+function makeGalleryGrid(items) {
+  return '<div class="gallery-grid">' + items.map(g => {
+    const id    = g.id || 0;
+    const title = esc(g.title || '');
+    const thumb = escAttr(g.thumb_url || '');
+    const st    = jobStatuses[String(id)] || '';
+    const btnCls= st ? `dl-btn ${st}` : 'dl-btn';
+    const btnTxt= { queued:'⏳ キュー待ち', running:'⬇ ダウンロード中', done:'✅ 完了', error:'❌ エラー' }[st] || '⬇ DL';
+    return `<div class="gcard" data-id="${id}" data-thumb="${thumb}" data-title="${escAttr(g.title||'')}">
+      <img class="thumb" src="${thumb}" alt="${title}" loading="lazy" onerror="this.style.visibility='hidden'"/>
+      <div class="gcard-title">${title}</div>
+      <button class="${btnCls}" onclick="quickDl(${id},this)">${btnTxt}</button>
+    </div>`;
+  }).join('') + '</div>';
 }
 
-// ────────────────────────────────────────
+// ══════════════════════════════════════
 // Download
-// ────────────────────────────────────────
-function setDlGid(id) {
-  document.getElementById('dl-gid').value = id;
-}
-
-async function startDownload() {
-  const gid = document.getElementById('dl-gid').value.trim();
-  if (!gid) { alert('ギャラリーIDを入力してください'); return; }
-  const fmt = document.getElementById('dl-fmt').value;
+// ══════════════════════════════════════
+async function quickDl(gid, btn) {
+  const fmt     = document.getElementById('dl-fmt').value;
   const workers = parseInt(document.getElementById('dl-workers').value) || 8;
-  await _doDownload(gid, fmt, workers, true, 'dl-status');
+  btn.disabled  = true;
+  const res = await apiFetch('/api/download', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ gallery_id: gid, fmt, workers, skip_if_exists: true })
+  });
+  if (res && !res.error) {
+    jobStatuses[String(gid)] = res.status === 'already_running' ? 'running' : 'queued';
+    updateDlBtn(gid);
+    openQueue();
+  }
+  btn.disabled = false;
 }
 
 async function manualDownload() {
-  const gid = document.getElementById('m-gid').value.trim();
-  if (!gid) { alert('ギャラリーIDを入力してください'); return; }
-  const fmt = document.getElementById('m-fmt').value;
+  const gid     = document.getElementById('m-gid').value.trim();
+  const fmt     = document.getElementById('m-fmt').value;
   const workers = parseInt(document.getElementById('m-workers').value) || 8;
-  const skip = document.getElementById('m-skip').checked;
-  await _doDownload(gid, fmt, workers, skip, 'm-status');
+  const skip    = document.getElementById('m-skip').checked;
+  if (!gid) { alert('IDを入力してください'); return; }
+  const box = document.getElementById('m-status');
+  box.style.display = 'block';
+  box.className = 'status-box s-run';
+  box.textContent = '⏳ キューに追加中…';
+  const res = await apiFetch('/api/download', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ gallery_id: gid, fmt, workers, skip_if_exists: skip })
+  });
+  if (res && !res.error) {
+    box.textContent = `✅ キューに追加: ${gid} (${res.status})`;
+    openQueue();
+  } else {
+    box.className = 'status-box s-err';
+    box.textContent = '❌ ' + (res?.error || '不明なエラー');
+  }
 }
 
-async function _doDownload(gid, fmt, workers, skip, statusId) {
-  const box = document.getElementById(statusId);
-  box.style.display = 'block';
-  box.className = 'status-box status-run';
-  box.textContent = spinner_text() + ' ダウンロード開始中…';
+// ══════════════════════════════════════
+// Queue Panel (SSE)
+// ══════════════════════════════════════
+let queueOpen = false;
 
-  const res = await fetch('/api/download', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({gallery_id: gid, fmt, workers, skip_if_exists: skip})
-  }).then(r=>r.json()).catch(e=>({error:String(e)}));
+function toggleQueue() {
+  queueOpen = !queueOpen;
+  document.getElementById('queue-panel').classList.toggle('collapsed', !queueOpen);
+}
+function openQueue() {
+  queueOpen = true;
+  document.getElementById('queue-panel').classList.remove('collapsed');
+}
 
-  if (res.error) {
-    box.className = 'status-box status-err';
-    box.textContent = '❌ ' + res.error;
+function startQueueStream() {
+  const es = new EventSource('/api/queue/stream');
+  es.onmessage = ev => {
+    const data = JSON.parse(ev.data);
+    updateQueuePanel(data);
+  };
+  es.onerror = () => setTimeout(startQueueStream, 3000);
+}
+
+function updateQueuePanel(data) {
+  const jobs  = data.jobs  || {};
+  const queue = data.queue || [];
+
+  // jobStatuses更新
+  for (const [gid, job] of Object.entries(jobs)) {
+    jobStatuses[gid] = job.status;
+  }
+  refreshDlBtnStates();
+
+  const total   = Object.keys(jobs).length;
+  const running = Object.values(jobs).filter(j => j.status === 'running').length;
+  const queued  = Object.values(jobs).filter(j => j.status === 'queued').length;
+  const done    = Object.values(jobs).filter(j => j.status === 'done').length;
+
+  document.getElementById('queue-badge').textContent =
+    total === 0 ? '空' : `実行中:${running} / 待機:${queued} / 完了:${done}`;
+
+  // 表示（最新順 running→queued→done→error）
+  const order = { running:0, queued:1, done:2, error:3 };
+  const sorted = Object.entries(jobs).sort((a,b) => (order[a[1].status]||9) - (order[b[1].status]||9));
+
+  if (sorted.length === 0) {
+    setHtml('queue-body', '<div style="color:var(--muted);padding:16px;text-align:center;">キューは空です</div>');
     return;
   }
 
-  // SSEで進捗待機
-  const evtSrc = new EventSource(`/api/download/stream/${gid}`);
-  evtSrc.onmessage = ev => {
-    const data = JSON.parse(ev.data);
-    if (data.status === 'done') {
-      evtSrc.close();
-      box.className = 'status-box status-ok';
-      box.textContent = '✅ 完了: ' + JSON.stringify(data.result);
-    } else if (data.status === 'error') {
-      evtSrc.close();
-      box.className = 'status-box status-err';
-      box.textContent = '❌ エラー: ' + data.result;
-    } else {
-      box.textContent = spinner_text() + ' 処理中… (' + data.status + ')';
-    }
-  };
-  evtSrc.onerror = () => {
-    evtSrc.close();
-    box.className = 'status-box status-err';
-    box.textContent = '❌ 接続エラー';
-  };
+  const html = sorted.map(([gid, job]) => {
+    const stLabel = { queued:'⏳ 待機', running:'⬇ ダウンロード中', done:'✅ 完了', error:'❌ エラー' }[job.status] || job.status;
+    const stClass = `q-status-${job.status}`;
+    const result  = job.result ? (job.result.size_mb ? ` — ${job.result.size_mb}MB` : '') : '';
+    return `<div class="queue-item">
+      <span class="queue-item-gid">#${gid}</span>
+      <span class="queue-item-status ${stClass}">${stLabel}${result}</span>
+      ${job.status === 'done' ? `<a href="/api/download/file/${gid}" download class="btn btn-green btn-sm">💾</a>` : ''}
+    </div>`;
+  }).join('');
+  setHtml('queue-body', html);
 }
 
-// ────────────────────────────────────────
+function refreshDlBtnStates() {
+  document.querySelectorAll('.gcard').forEach(card => {
+    const gid = card.dataset.id;
+    const btn = card.querySelector('.dl-btn');
+    if (!btn) return;
+    const st = jobStatuses[String(gid)] || '';
+    btn.className = st ? `dl-btn ${st}` : 'dl-btn';
+    btn.textContent = { queued:'⏳ 待機中', running:'⬇ DL中', done:'✅ 完了', error:'❌ Error' }[st] || '⬇ DL';
+  });
+}
+
+function updateDlBtn(gid) {
+  const card = document.querySelector(`.gcard[data-id="${gid}"]`);
+  if (!card) return;
+  const btn = card.querySelector('.dl-btn');
+  if (!btn) return;
+  const st = jobStatuses[String(gid)] || '';
+  btn.className = st ? `dl-btn ${st}` : 'dl-btn';
+  btn.textContent = { queued:'⏳ 待機中', running:'⬇ DL中', done:'✅ 完了', error:'❌ Error' }[st] || '⬇ DL';
+}
+
+// ══════════════════════════════════════
+// Hover Popup
+// ══════════════════════════════════════
+function attachHover() {
+  const popup = document.getElementById('hover-popup');
+  document.querySelectorAll('.gcard').forEach(card => {
+    card.addEventListener('mouseenter', e => {
+      document.getElementById('popup-img').src = card.dataset.thumb;
+      document.getElementById('popup-id').textContent  = 'ID: ' + card.dataset.id;
+      document.getElementById('popup-ttl').textContent = card.dataset.title;
+      popup.style.display = 'block';
+      movePopup(e);
+    });
+    card.addEventListener('mousemove', movePopup);
+    card.addEventListener('mouseleave', () => { popup.style.display = 'none'; });
+  });
+}
+function movePopup(e) {
+  const p = document.getElementById('hover-popup');
+  let x = e.clientX + 14, y = e.clientY + 14;
+  if (x + 210 > window.innerWidth)  x = e.clientX - 220;
+  if (y + 250 > window.innerHeight) y = e.clientY - 260;
+  p.style.left = x + 'px';
+  p.style.top  = y + 'px';
+}
+
+// ══════════════════════════════════════
 // DB Stats
-// ────────────────────────────────────────
+// ══════════════════════════════════════
 async function loadStats() {
   const area = document.getElementById('stats-area');
-  area.innerHTML = spinner() + ' ロード中…';
-  const res = await fetch('/api/db/stats').then(r=>r.json()).catch(()=>null);
+  area.innerHTML = spin() + ' ロード中…';
+  const res = await apiFetch('/api/db/stats');
   if (!res) { area.innerHTML = '<span style="color:var(--muted)">取得失敗</span>'; return; }
-  const labels = {galleries:'ギャラリー',artists:'アーティスト',tags:'タグ',
-                  groups:'グループ',parodies:'パロディ',characters:'キャラ',downloads:'DL済み'};
-  area.innerHTML = '<div class="stats-grid">' +
-    Object.entries(res).map(([k,v]) =>
-      `<div class="stat-card"><div class="stat-num">${Number(v).toLocaleString()}</div><div class="stat-lbl">${labels[k]||k}</div></div>`
-    ).join('') + '</div>';
+  const lbl = {galleries:'ギャラリー',artists:'アーティスト',tags:'タグ',groups:'グループ',parodies:'パロディ',characters:'キャラ',downloads:'DL済み'};
+  area.innerHTML = '<div class="stats-grid">' + Object.entries(res).map(([k,v]) =>
+    `<div class="stat-card"><div class="stat-num">${Number(v).toLocaleString()}</div><div class="stat-lbl">${lbl[k]||k}</div></div>`
+  ).join('') + '</div>';
 }
 
-// ────────────────────────────────────────
+// ══════════════════════════════════════
 // Scrape
-// ────────────────────────────────────────
+// ══════════════════════════════════════
 async function startScrape(cats) {
   const workers = parseInt(document.getElementById('scrape-workers').value) || 8;
   const box = document.getElementById('scrape-status');
   box.style.display = 'block';
-  box.className = 'status-box status-run';
-  box.textContent = spinner_text() + ' スクレイピング開始: ' + cats.join(', ');
-
-  const res = await fetch('/api/db/scrape', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({categories: cats, workers})
-  }).then(r=>r.json()).catch(e=>({error:String(e)}));
-
-  if (res.error) {
-    box.className = 'status-box status-err';
-    box.textContent = '❌ ' + res.error;
+  box.className = 'status-box s-run';
+  box.textContent = '⏳ スクレイピング開始: ' + cats.join(', ');
+  const res = await apiFetch('/api/db/scrape', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ categories: cats, workers })
+  });
+  if (!res || res.error) {
+    box.className = 'status-box s-err';
+    box.textContent = '❌ ' + (res?.error || '不明なエラー');
     return;
   }
-  const scrapeId = res.scrape_id;
-
-  // ポーリング（SSEにすると複雑なのでsetInterval）
+  const id = res.scrape_id;
   const timer = setInterval(async () => {
-    const s = await fetch(`/api/db/scrape/status/${scrapeId}`).then(r=>r.json()).catch(()=>null);
+    const s = await apiFetch(`/api/db/scrape/status/${id}`);
     if (!s) return;
     if (s.status === 'done') {
       clearInterval(timer);
-      box.className = 'status-box status-ok';
-      const lines = Object.entries(s.result||{}).map(([k,v])=>`  ${k}: ${v}`).join('\n');
-      box.textContent = '✅ 完了:\n' + lines;
+      box.className = 'status-box s-ok';
+      box.textContent = '✅ 完了:\n' + Object.entries(s.result||{}).map(([k,v])=>`  ${k}: ${v}`).join('\n');
       loadStats();
     } else if (s.status === 'error') {
       clearInterval(timer);
-      box.className = 'status-box status-err';
+      box.className = 'status-box s-err';
       box.textContent = '❌ ' + JSON.stringify(s.result);
     }
   }, 3000);
 }
 
-// ────────────────────────────────────────
+// ══════════════════════════════════════
 // History
-// ────────────────────────────────────────
+// ══════════════════════════════════════
 async function loadHistory() {
   const area = document.getElementById('history-area');
-  area.innerHTML = spinner() + ' ロード中…';
-  const res = await fetch('/api/history?limit=200').then(r=>r.json()).catch(()=>null);
+  area.innerHTML = spin() + ' ロード中…';
+  const res = await apiFetch('/api/history?limit=200');
   if (!res || !res.history || res.history.length === 0) {
     area.innerHTML = '<div style="color:var(--muted)">履歴がありません</div>';
     return;
   }
-  const rows = res.history.map(r => `<tr>
-    <td>${r.gallery_id||''}</td>
-    <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(r.title||'')}</td>
-    <td>${r.fmt||''}</td>
-    <td>${r.pages||''}</td>
-    <td>${fmtBytes(r.size_bytes)}</td>
-    <td>${r.downloaded_at||''}</td>
-  </tr>`).join('');
-  area.innerHTML = `<div style="overflow-x:auto;"><table class="hist-table">
-    <thead><tr><th>ID</th><th>タイトル</th><th>形式</th><th>P数</th><th>サイズ</th><th>日時</th></tr></thead>
+  const rows = res.history.map(r =>
+    `<tr>
+      <td>${r.gallery_id||''}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.title||'')}</td>
+      <td>${r.fmt||''}</td>
+      <td>${r.pages||'-'}</td>
+      <td>${fmtBytes(r.size_bytes)}</td>
+      <td><a href="/api/download/file/${r.gallery_id}" download class="btn btn-green btn-sm">💾 ローカルDL</a></td>
+    </tr>`
+  ).join('');
+  area.innerHTML = `<div class="hist-wrap"><table class="hist-table">
+    <thead><tr><th>ID</th><th>タイトル</th><th>形式</th><th>P数</th><th>サイズ</th><th>DL</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
 }
 
-// ────────────────────────────────────────
-// Utils
-// ────────────────────────────────────────
-function setHtml(id, html) { document.getElementById(id).innerHTML = html; }
-function spinner() { return '<span class="spinner"></span>'; }
-function spinner_text() { return '⏳'; }
-
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+// ══════════════════════════════════════
+// Helpers
+// ══════════════════════════════════════
+function setHtml(id, html) { const el = document.getElementById(id); if(el) el.innerHTML = html; }
+function hidePagination()  { document.getElementById('site-pagination').style.display = 'none'; }
+function spin() { return '<span class="spinner"></span>'; }
+function enc(s) { return encodeURIComponent(s); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escAttr(s) { return String(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-
 function fmtBytes(b) {
   if (!b) return '-';
   if (b > 1e9) return (b/1e9).toFixed(1)+'GB';
@@ -844,10 +693,16 @@ function fmtBytes(b) {
   if (b > 1e3) return (b/1e3).toFixed(1)+'KB';
   return b+'B';
 }
+async function apiFetch(url, opts) {
+  try { return await fetch(url, opts).then(r => r.json()); }
+  catch(e) { console.error(url, e); return null; }
+}
 
+// ══════════════════════════════════════
 // Init
+// ══════════════════════════════════════
+startQueueStream();
 loadStats();
-loadHistory();
 </script>
 
 </body>
