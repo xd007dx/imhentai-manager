@@ -13,6 +13,7 @@ import logging
 import difflib
 import re
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from bs4 import BeautifulSoup
@@ -194,9 +195,114 @@ def get_category_last_page(session: requests.Session, category: str) -> int:
         return 1
 
 
-def scrape_category_page(session: requests.Session, conn: sqlite3.Connection,
-                          category: str, page: int = 1,
-                          min_delay: float = 1.0, max_delay: float = 3.0) -> int:
+def scrape_category_all_parallel(session: requests.Session, conn: sqlite3.Connection,
+                                   category: str, workers: int = 8,
+                                   progress_cb=None) -> int:
+    """
+    カテゴリ全ページを並列スクレイピングしてDBに保存する
+    progress_cb(done, total, cat, page) を呼び出す
+    返値: 保存した合計エントリ数
+    """
+    last_page = get_category_last_page(session, category)
+    pages = list(range(1, last_page + 1))
+    total = len(pages)
+    done = 0
+    grand_total = 0
+    lock = __import__("threading").Lock()
+
+    def fetch_one(page):
+        # 各スレッドで独立したセッションを使う（スレッドセーフ）
+        s = requests.Session()
+        s.headers.update(HEADERS_DEFAULT)
+        # 軽いランダム遅延でサーバー負荷を分散
+        time.sleep(random.uniform(0.1, 0.5))
+        url = f"{BASE_URL}/{CATEGORY_URL[category][0]}/?page={page}"
+        try:
+            resp = s.get(url, timeout=20)
+            resp.raise_for_status()
+        except Exception as e:
+            logger.warning(f"{category} p{page} failed: {e}")
+            return page, []
+
+        soup = BeautifulSoup(resp.text, "lxml")
+        _, item_slug = CATEGORY_URL[category]
+        links = soup.select(f"a[href*='/{item_slug}/']")
+        entries = []
+        for link in links:
+            href = link.get("href", "")
+            if not re.match(rf"^/{item_slug}/[^/]+/?$", href):
+                continue
+            full_text = link.get_text(strip=True)
+            badge = link.select_one(".badge")
+            badge_count = int(re.sub(r"\D", "", badge.get_text())) if badge else 0
+            name = full_text.replace(badge.get_text(strip=True), "").strip() if badge \
+                   else re.sub(r"\s*\d+\s*$", "", full_text).strip()
+            if name:
+                entries.append((name, href, badge_count))
+        return page, entries
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(fetch_one, p): p for p in pages}
+        for future in as_completed(futures):
+            page, entries = future.result()
+            done += 1
+            if progress_cb:
+                progress_cb(done, total, category, page)
+            if entries:
+                with lock:
+                    for name, href, count in entries:
+                        conn.execute(
+                            f"INSERT INTO {category}(name, url, count) VALUES(?,?,?) "
+                            f"ON CONFLICT(name) DO UPDATE SET url=excluded.url, count=excluded.count",
+                            (name, href, count)
+                        )
+                    conn.commit()
+                    grand_total += len(entries)
+
+    logger.info(f"{category}: {grand_total} entries from {total} pages (workers={workers})")
+    return grand_total
+
+
+def download_images_parallel(session: requests.Session, image_urls: list[str],
+                              workers: int = 8,
+                              progress_cb=None) -> list[tuple[int, bytes, str]]:
+    """
+    画像URLリストを並列ダウンロードする
+    返値: [(index, content, ext), ...] インデックス順でソート済み
+    """
+    results = {}
+    done = 0
+    total = len(image_urls)
+    lock = __import__("threading").Lock()
+
+    def fetch_img(args):
+        idx, url = args
+        s = requests.Session()
+        s.headers.update(HEADERS_DEFAULT)
+        time.sleep(random.uniform(0.05, 0.3))
+        try:
+            resp = s.get(url, timeout=30)
+            resp.raise_for_status()
+            ext = url.rsplit(".", 1)[-1].split("?")[0] or "jpg"
+            return idx, resp.content, ext
+        except Exception as e:
+            logger.warning(f"Failed image {idx} ({url}): {e}")
+            return idx, None, "jpg"
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(fetch_img, (i, url)): i
+                   for i, url in enumerate(image_urls, 1)}
+        for future in as_completed(futures):
+            idx, content, ext = future.result()
+            with lock:
+                done += 1
+                if content:
+                    results[idx] = (content, ext)
+            if progress_cb:
+                progress_cb(done, total)
+
+    # インデックス順にソートして返す
+    return [(idx, *results[idx]) for idx in sorted(results.keys())]
     """
     カテゴリページ1枚をスクレイピングしてDBに保存する
     category: artists / groups / tags / parodies / characters
@@ -444,28 +550,24 @@ def search_db(conn: sqlite3.Connection, query: str,
 
 def download_gallery_zip(session: requests.Session, gallery_id: int,
                           output_dir: str,
-                          min_delay: float = 0.5, max_delay: float = 1.5,
+                          workers: int = 8,
                           progress_cb=None) -> str:
-    """ギャラリーをZIPでダウンロードする。progress_cb(done, total)を呼び出す"""
+    """ギャラリーを並列ダウンロードしてZIPで保存する"""
     import zipfile
 
-    image_urls = get_gallery_image_urls(session, gallery_id, min_delay, max_delay)
+    image_urls = get_gallery_image_urls(session, gallery_id)
     if not image_urls:
         raise RuntimeError(f"No images found for gallery {gallery_id}")
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     zip_path = Path(output_dir) / f"{gallery_id}.zip"
 
+    downloaded = download_images_parallel(session, image_urls, workers, progress_cb)
+
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for i, img_url in enumerate(image_urls, 1):
-            if progress_cb:
-                progress_cb(i, len(image_urls))
-            try:
-                resp = rate_limited_get(session, img_url, 0.3, 0.8)
-                ext = img_url.rsplit(".", 1)[-1].split("?")[0] or "jpg"
-                zf.writestr(f"{i:04d}.{ext}", resp.content)
-            except Exception as e:
-                logger.warning(f"Failed {img_url}: {e}")
+        for idx, content, ext in downloaded:
+            if content:
+                zf.writestr(f"{idx:04d}.{ext}", content)
 
     logger.info(f"ZIP saved: {zip_path}")
     return str(zip_path)
@@ -473,14 +575,14 @@ def download_gallery_zip(session: requests.Session, gallery_id: int,
 
 def download_gallery_pdf(session: requests.Session, gallery_id: int,
                           output_dir: str,
-                          min_delay: float = 0.5, max_delay: float = 1.5,
+                          workers: int = 8,
                           progress_cb=None) -> str:
-    """ギャラリーをPDFでダウンロードする"""
+    """ギャラリーを並列ダウンロードしてPDFで保存する"""
     from fpdf import FPDF
     from PIL import Image
     import io
 
-    image_urls = get_gallery_image_urls(session, gallery_id, min_delay, max_delay)
+    image_urls = get_gallery_image_urls(session, gallery_id)
     if not image_urls:
         raise RuntimeError(f"No images found for gallery {gallery_id}")
 
@@ -489,28 +591,28 @@ def download_gallery_pdf(session: requests.Session, gallery_id: int,
     tmp_dir = Path(output_dir) / f"_tmp_{gallery_id}"
     tmp_dir.mkdir(exist_ok=True)
 
+    downloaded = download_images_parallel(session, image_urls, workers, progress_cb)
+
     pdf = FPDF()
     pdf.set_auto_page_break(False)
 
-    for i, img_url in enumerate(image_urls, 1):
-        if progress_cb:
-            progress_cb(i, len(image_urls))
+    for idx, content, ext in downloaded:
+        if not content:
+            continue
         try:
-            resp = rate_limited_get(session, img_url, 0.3, 0.8)
-            img = Image.open(io.BytesIO(resp.content)).convert("RGB")
+            img = Image.open(io.BytesIO(content)).convert("RGB")
             w, h = img.size
             pdf_w = 210
             pdf_h = int(h * pdf_w / w)
             pdf.add_page(format=(pdf_w, pdf_h))
-            tmp_file = tmp_dir / f"{i:04d}.jpg"
+            tmp_file = tmp_dir / f"{idx:04d}.jpg"
             img.save(str(tmp_file), "JPEG", quality=85)
             pdf.image(str(tmp_file), 0, 0, pdf_w, pdf_h)
         except Exception as e:
-            logger.warning(f"Failed {img_url}: {e}")
+            logger.warning(f"Failed to process image {idx}: {e}")
 
     pdf.output(str(pdf_path))
 
-    # 一時ファイル削除
     import shutil
     shutil.rmtree(tmp_dir, ignore_errors=True)
 

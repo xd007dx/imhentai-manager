@@ -21,7 +21,8 @@ import yaml
 from imhentai import (
     init_db, export_db_json, db_stats,
     get_session, get_category_last_page,
-    scrape_category_page, scrape_gallery_metadata,
+    scrape_category_all_parallel,
+    scrape_gallery_metadata,
     search_db, download_gallery_zip, download_gallery_pdf,
     upload_to_gdrive, get_gallery_image_urls,
 )
@@ -226,38 +227,35 @@ def search_tab():
 # タブ2: ⬇️ ダウンロード
 # ──────────────────────────────────────────────
 
-def do_download(gallery_id_str, fmt, upload_drive, skip_if_exists, progress=gr.Progress()):
+def do_download(gallery_id_str, fmt, upload_drive, skip_if_exists, dl_workers, progress=gr.Progress()):
     gid_str = str(gallery_id_str).strip()
-
-    # IDの抽出（"ID:123456 - Title" 形式にも対応）
     m = re.search(r"\d+", gid_str)
     if not m:
         return "❌ 有効なギャラリーIDを入力してください。", None
 
-    import re
     gid = int(m.group())
     cfg = load_config()
     session = get_session(cfg["user_agent"])
     conn = get_conn()
-    rl = cfg["rate_limit"]
     out_dir = cfg["download_dir"]
+    workers = int(dl_workers)
 
-    # 重複スキップチェック
+    # 重複スキップ
     if skip_if_exists and is_downloaded(gid):
         row = conn.execute("SELECT title, file_path FROM galleries WHERE id=?", (gid,)).fetchone()
         title = row["title"] if row else f"Gallery {gid}"
         fp = row["file_path"] if row else ""
-        return f"⏭️  スキップ: 「{title}」はダウンロード済みです\n  ファイル: {fp}", None
+        return f"⏭️  スキップ: 「{title}」はDL済みです\n  ファイル: {fp}", None
 
     # メタデータ取得
-    progress(0.1, desc="📖 メタデータ取得中...")
+    progress(0.05, desc="📖 メタデータ取得中...")
     try:
-        meta = scrape_gallery_metadata(session, conn, gid, rl["min_delay"], rl["max_delay"])
+        meta = scrape_gallery_metadata(session, conn, gid)
     except Exception as e:
         return f"❌ メタデータ取得失敗: {e}", None
 
     if not meta:
-        return f"❌ ギャラリー {gid} が見つかりませんでした (404)", None
+        return f"❌ ギャラリー {gid} が見つかりません (404)", None
 
     info = (
         f"📖 タイトル : {meta['title']}\n"
@@ -266,24 +264,22 @@ def do_download(gallery_id_str, fmt, upload_drive, skip_if_exists, progress=gr.P
         f"🏷️  タグ     : {(meta['tags'] or '')[:80]}{'...' if len(meta.get('tags',''))>80 else ''}\n"
     )
 
-    # 進捗コールバック
+    # 並列ダウンロード進捗コールバック
     def cb(done, total):
-        progress(0.2 + 0.7 * done / total,
-                 desc=f"⬇️  ダウンロード中... [{done}/{total}]")
+        progress(
+            0.1 + 0.85 * done / total,
+            desc=f"⬇️  [{done}/{total}] {workers}並列ダウンロード中..."
+        )
 
-    # ダウンロード
-    progress(0.2, desc="⬇️  ダウンロード開始...")
+    progress(0.1, desc=f"⬇️  {workers}並列でダウンロード開始...")
     try:
         if fmt == "ZIP":
-            file_path = download_gallery_zip(session, gid, out_dir,
-                                              rl["min_delay"], rl["max_delay"], cb)
+            file_path = download_gallery_zip(session, gid, out_dir, workers, cb)
         else:
-            file_path = download_gallery_pdf(session, gid, out_dir,
-                                              rl["min_delay"], rl["max_delay"], cb)
+            file_path = download_gallery_pdf(session, gid, out_dir, workers, cb)
     except Exception as e:
         return f"{info}\n❌ ダウンロード失敗: {e}", None
 
-    # DB更新
     conn.execute(
         "UPDATE galleries SET downloaded=1, file_path=? WHERE id=?",
         (file_path, gid)
@@ -292,9 +288,8 @@ def do_download(gallery_id_str, fmt, upload_drive, skip_if_exists, progress=gr.P
 
     msg = f"{info}\n✅ 保存完了: {file_path}"
 
-    # Google Driveアップロード
     if upload_drive:
-        progress(0.95, desc="☁️  Google Drive アップロード中...")
+        progress(0.97, desc="☁️  Google Drive アップロード中...")
         gdrive_cfg = cfg["gdrive"]
         link = upload_to_gdrive(
             file_path,
@@ -302,10 +297,7 @@ def do_download(gallery_id_str, fmt, upload_drive, skip_if_exists, progress=gr.P
             credentials_file=gdrive_cfg.get("credentials_file", "credentials.json"),
             delete_old=True,
         )
-        if link:
-            msg += f"\n☁️  Drive: {link}"
-        else:
-            msg += "\n⚠️  Google Drive未設定 (credentials.json が必要)"
+        msg += f"\n☁️  Drive: {link}" if link else "\n⚠️  Google Drive未設定"
 
     progress(1.0, desc="✅ 完了!")
     return msg, file_path
@@ -315,7 +307,6 @@ def download_tab(search_candidates):
     import re as _re
 
     def fill_id_from_candidate(candidate):
-        """検索タブの候補選択 → IDフィールドに自動入力"""
         if not candidate:
             return gr.update()
         m = _re.search(r"ID:(\d+)", candidate)
@@ -333,22 +324,22 @@ def download_tab(search_candidates):
             )
             fmt_radio = gr.Radio(["ZIP", "PDF"], label="保存形式", value="ZIP", scale=2)
         with gr.Row():
+            dl_workers_slider = gr.Slider(1, 16, value=8, step=1,
+                                           label="⚡ 並列ダウンロード数", scale=3)
             skip_chk = gr.Checkbox(label="⏭️ DL済みはスキップ", value=True, scale=2)
             upload_chk = gr.Checkbox(label="☁️ Google Driveにアップ", scale=2)
         dl_btn = gr.Button("⬇️ ダウンロード開始", variant="primary", size="lg")
         dl_result = gr.Textbox(label="結果", lines=10, interactive=False)
         dl_file = gr.File(label="ダウンロードしたファイル")
 
-        # 検索タブからの候補選択で自動入力
         search_candidates.change(
             fill_id_from_candidate,
             inputs=[search_candidates],
             outputs=[gallery_id_input],
         )
-
         dl_btn.click(
             do_download,
-            inputs=[gallery_id_input, fmt_radio, upload_chk, skip_chk],
+            inputs=[gallery_id_input, fmt_radio, upload_chk, skip_chk, dl_workers_slider],
             outputs=[dl_result, dl_file],
         )
 
@@ -359,7 +350,7 @@ def download_tab(search_candidates):
 # タブ3: 🗄️ DB管理
 # ──────────────────────────────────────────────
 
-def do_db_update(cats, progress=gr.Progress()):
+def do_db_update(cats, workers_val, progress=gr.Progress()):
     if not cats:
         return "⚠️ 少なくとも1つのカテゴリを選択してください。"
 
@@ -373,47 +364,47 @@ def do_db_update(cats, progress=gr.Progress()):
     selected = [cat_map[c] for c in cats if c in cat_map]
     session = get_session(load_config()["user_agent"])
     conn = get_conn()
-    rl = load_config()["rate_limit"]
     log_lines = []
+    workers = int(workers_val)
 
-    # まず各カテゴリの最終ページ数を取得
-    log_lines.append("📡 最終ページ数を確認中...")
+    # 各カテゴリの最終ページを事前取得
+    log_lines.append(f"📡 最終ページ数を確認中... (並列数: {workers})")
     last_pages = {}
     for cat in selected:
         lp = get_category_last_page(session, cat)
         last_pages[cat] = lp
         log_lines.append(f"  {cat}: {lp} ページ")
 
-    total_steps = sum(last_pages.values())
-    step = 0
+    total_pages = sum(last_pages.values())
+    global_done = [0]
 
-    for cat in selected:
-        total = 0
-        max_page = last_pages[cat]
-        log_lines.append(f"\n🔄 {cat} 取得開始（全 {max_page} ページ）")
+    import time
+    start_all = time.time()
 
-        for page in range(1, max_page + 1):
-            step += 1
+    for ci, cat in enumerate(selected):
+        lp = last_pages[cat]
+        cat_done = [0]
+        cat_total = [0]
+        log_lines.append(f"\n🔄 {cat} 取得開始（{lp}p × {workers}並列）")
+
+        def cb(done, total, category=cat, max_p=lp):
+            cat_done[0] = done
+            cat_total[0] = total
+            global_done[0] += 1
+            pct = global_done[0] / total_pages
+            elapsed = time.time() - start_all
+            eta = (elapsed / global_done[0]) * (total_pages - global_done[0]) if global_done[0] else 0
             progress(
-                step / total_steps,
-                desc=f"🔄 {cat} [{page}/{max_page}]..."
+                min(pct, 0.99),
+                desc=f"🔄 {category} [{done}/{total}]  ETA: {eta:.0f}s"
             )
-            try:
-                n = scrape_category_page(session, conn, cat, page,
-                                          rl["min_delay"], rl["max_delay"])
-                total += n
-                if n == 0:
-                    log_lines.append(f"  p{page}: 結果なし → 終了")
-                    break
-                # 10ページごとにログ出力
-                if page % 10 == 0 or page == max_page:
-                    log_lines.append(f"  p{page}/{max_page}: 累計 {total:,} 件")
-            except Exception as e:
-                log_lines.append(f"  ⚠️ p{page} エラー: {e}")
-                break
 
-        log_lines.append(f"✅ {cat}: 合計 {total:,} 件保存")
+        n = scrape_category_all_parallel(session, conn, cat, workers=workers, progress_cb=cb)
+        elapsed = time.time() - start_all
+        log_lines.append(f"✅ {cat}: {n:,} 件保存  ({elapsed:.0f}s 経過)")
 
+    progress(1.0, desc="✅ 完了!")
+    log_lines.append(f"\n⏱ 合計時間: {time.time() - start_all:.0f}s")
     log_lines.append("\n" + fmt_stats())
     return "\n".join(log_lines)
 
@@ -445,9 +436,12 @@ def db_tab():
                     label="取得するカテゴリ",
                     value=["🎨 Artists", "👥 Groups"],
                 )
+                scrape_workers_slider = gr.Slider(1, 16, value=8, step=1,
+                                                   label="⚡ 並列スクレイピング数")
                 gr.Markdown(
                     "_⚠️ 全ページ取得は時間がかかります_\n"
-                    "_(Artists≈1057p / Groups≈638p / Tags≈338p / Parodies≈120p / Characters≈516p)_",
+                    "_(Artists≈1057p / Groups≈638p / Tags≈338p / Parodies≈120p / Characters≈516p)_\n"
+                    "_8並列推奨: Artists全件≈約5分_",
                 )
                 update_btn = gr.Button("🔄 スクレイピング開始（全ページ）", variant="primary")
 
@@ -460,7 +454,7 @@ def db_tab():
         db_log = gr.Textbox(label="ログ / 統計", lines=18, interactive=False,
                             value=fmt_stats)
 
-        update_btn.click(do_db_update, [cat_checkboxes], [db_log])
+        update_btn.click(do_db_update, [cat_checkboxes, scrape_workers_slider], [db_log])
         export_btn.click(
             do_db_export,
             inputs=[],
