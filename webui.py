@@ -1,34 +1,39 @@
 #!/usr/bin/env python3
 """
-imhentai-manager Web UI
-Gradio ベースのインターフェース
-
-タブ構成:
-  1. 🔍 検索
-  2. ⬇️ ダウンロード
-  3. 🗄️ DB管理
-  4. 📋 ダウンロード履歴
+imhentai-manager Web UI (Gradio)
+Phase 2機能込み:
+  - 進捗バー付きダウンロード
+  - 重複スキップ
+  - ダウンロード済み管理
+  - DBスクレイピング
+  - Fuzzy match検索
+  - Google Drive連携
 """
 
 import gradio as gr
 import logging
 import json
+import threading
 from pathlib import Path
+from datetime import datetime
 import yaml
 
-# コア機能をインポート
 from imhentai import (
-    init_db, export_db_json, get_session,
-    scrape_category_page, scrape_gallery_metadata,
+    init_db, export_db_json, db_stats,
+    get_session, scrape_category_page, scrape_gallery_metadata,
     search_db, download_gallery_zip, download_gallery_pdf,
-    upload_to_gdrive,
+    upload_to_gdrive, get_gallery_image_urls,
 )
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────
-# 設定読み込み
+# 設定
 # ──────────────────────────────────────────────
 
 DEFAULT_CONFIG = {
@@ -53,46 +58,134 @@ def get_conn():
     cfg = load_config()
     return init_db(cfg["database_path"])
 
-def get_session_cfg():
-    cfg = load_config()
-    return get_session(cfg["user_agent"]), cfg
+
+# ──────────────────────────────────────────────
+# CSS
+# ──────────────────────────────────────────────
+
+CUSTOM_CSS = """
+/* ── 全体 ── */
+.gradio-container {
+    max-width: 1100px !important;
+    margin: 0 auto !important;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+/* ── ヘッダー ── */
+.app-header {
+    text-align: center;
+    padding: 24px 0 8px;
+    border-bottom: 2px solid #e2e8f0;
+    margin-bottom: 16px;
+}
+.app-header h1 { font-size: 2rem; margin: 0; }
+.app-header p  { color: #64748b; margin: 4px 0 0; }
+
+/* ── タブ ── */
+.tab-nav button {
+    font-size: 1rem !important;
+    padding: 10px 20px !important;
+}
+
+/* ── ボタン ── */
+.btn-primary  { background: #6366f1 !important; }
+.btn-success  { background: #22c55e !important; }
+.btn-warning  { background: #f59e0b !important; }
+.btn-danger   { background: #ef4444 !important; }
+
+/* ── 統計カード ── */
+.stat-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+}
+.stat-num { font-size: 2rem; font-weight: bold; color: #6366f1; }
+.stat-label { color: #64748b; font-size: 0.85rem; }
+
+/* ── 結果テキスト ── */
+textarea { font-family: monospace !important; font-size: 0.9rem !important; }
+
+/* ── ダウンロード済みバッジ ── */
+.dl-done { color: #22c55e; }
+.dl-pend { color: #94a3b8; }
+"""
+
+
+# ──────────────────────────────────────────────
+# ヘルパー
+# ──────────────────────────────────────────────
+
+def fmt_stats() -> str:
+    """DB統計をフォーマットして返す"""
+    conn = get_conn()
+    s = db_stats(conn)
+    lines = [
+        "📊 **データベース統計**",
+        f"  🎨 Artists:    {s.get('artists', 0):,} 件",
+        f"  👥 Groups:     {s.get('groups', 0):,} 件",
+        f"  🏷️  Tags:       {s.get('tags', 0):,} 件",
+        f"  📺 Parodies:   {s.get('parodies', 0):,} 件",
+        f"  👤 Characters: {s.get('characters', 0):,} 件",
+        f"  📚 Galleries:  {s.get('galleries', 0):,} 件 (DL済み: {s.get('downloaded', 0):,})",
+    ]
+    return "\n".join(lines)
+
+def is_downloaded(gallery_id: int) -> bool:
+    """ギャラリーがDL済みかどうか確認する"""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT downloaded, file_path FROM galleries WHERE id=?", (gallery_id,)
+    ).fetchone()
+    if row and row["downloaded"]:
+        # ファイルが実際に存在するか確認
+        fp = row["file_path"]
+        if fp and Path(fp).exists():
+            return True
+    return False
 
 
 # ──────────────────────────────────────────────
 # タブ1: 🔍 検索
 # ──────────────────────────────────────────────
 
-def do_search(query, search_type):
+def do_search(query, search_type, progress=gr.Progress()):
     if not query.strip():
-        return "クエリを入力してください。", gr.update(choices=[], visible=False)
+        return "⚠ クエリを入力してください。", gr.update(choices=[], visible=False)
 
+    progress(0.3, desc="検索中...")
     conn = get_conn()
-    type_map = {"全体": "all", "アーティスト": "artist", "作品タイトル": "title"}
+    type_map = {"全体": "all", "🎨 アーティスト": "artist", "📚 作品タイトル": "title"}
     results = search_db(conn, query.strip(), type_map.get(search_type, "all"))
+    progress(1.0)
 
     if not results:
-        return "❌ 結果が見つかりませんでした。", gr.update(choices=[], visible=False)
+        return "❌ 結果が見つかりませんでした。\n\n💡 先にDB管理タブでスクレイピングを実行してください。", \
+               gr.update(choices=[], visible=False)
 
     fuzzy = any(r["type"].endswith("_fuzzy") for r in results)
     lines = []
     choices = []
 
     if fuzzy:
-        lines.append("⚠️ 完全一致が見つかりませんでした。近似候補:\n")
+        lines.append(f"⚠️  「{query}」の完全一致なし → 近似候補:\n")
     else:
-        lines.append(f"✅ {len(results)} 件見つかりました:\n")
+        lines.append(f"✅  {len(results)} 件ヒット:\n")
 
     for i, r in enumerate(results, 1):
-        if r["type"] in ("artist", "artist_fuzzy"):
-            score = f" (類似度: {r.get('score', 0):.0%})" if fuzzy else ""
-            line = f"{i}. [アーティスト]{score}  {r['name']}  (作品数: {r.get('count', '?')})"
+        t = r["type"]
+        if "artist" in t:
+            score = f"  [類似度: {r.get('score', 0):.0%}]" if fuzzy else ""
+            line = f"{i}. 🎨 {r['name']}{score}  (作品数: {r.get('count', '?')})"
             lines.append(line)
             choices.append(r["name"])
-        elif r["type"] in ("gallery", "gallery_fuzzy"):
-            score = f" (類似度: {r.get('score', 0):.0%})" if fuzzy else ""
-            line = f"{i}. [ギャラリー]{score}  ID:{r['id']}  {r['title']}"
+        elif "gallery" in t:
+            score = f"  [類似度: {r.get('score', 0):.0%}]" if fuzzy else ""
+            dl = "✅" if is_downloaded(r["id"]) else "⬜"
+            line = f"{i}. 📚 {dl} ID:{r['id']}{score}  {r['title']}"
             if r.get("artist"):
-                line += f"\n      Artist: {r['artist']}"
+                line += f"\n       🎨 {r['artist']}"
             lines.append(line)
             choices.append(f"ID:{r['id']} - {r['title']}")
 
@@ -105,30 +198,26 @@ def search_tab():
         with gr.Row():
             query_input = gr.Textbox(
                 label="検索クエリ",
-                placeholder="例: Kariya, Tekoki Maniax ...",
+                placeholder="例: Kariya、Tekoki Maniax、Abubu ...",
                 scale=4,
             )
             search_type = gr.Radio(
-                ["全体", "アーティスト", "作品タイトル"],
+                ["全体", "🎨 アーティスト", "📚 作品タイトル"],
                 label="検索対象",
                 value="全体",
                 scale=2,
             )
-        search_btn = gr.Button("🔍 検索", variant="primary")
-        result_text = gr.Textbox(label="検索結果", lines=12, interactive=False)
-        candidates = gr.Radio(label="候補から選択（ダウンロードタブに転送）",
-                               visible=False, interactive=True)
+        search_btn = gr.Button("🔍 検索", variant="primary", size="lg")
+        result_text = gr.Textbox(label="検索結果", lines=14, interactive=False)
+        candidates = gr.Radio(
+            label="📌 候補から選択（ダウンロードタブのIDに自動入力されます）",
+            visible=False,
+            interactive=True,
+        )
 
-        search_btn.click(
-            do_search,
-            inputs=[query_input, search_type],
-            outputs=[result_text, candidates],
-        )
-        query_input.submit(
-            do_search,
-            inputs=[query_input, search_type],
-            outputs=[result_text, candidates],
-        )
+        search_btn.click(do_search, [query_input, search_type], [result_text, candidates])
+        query_input.submit(do_search, [query_input, search_type], [result_text, candidates])
+
     return candidates
 
 
@@ -136,84 +225,132 @@ def search_tab():
 # タブ2: ⬇️ ダウンロード
 # ──────────────────────────────────────────────
 
-def do_download(gallery_id, fmt, upload_drive, progress=gr.Progress()):
-    if not str(gallery_id).strip().isdigit():
+def do_download(gallery_id_str, fmt, upload_drive, skip_if_exists, progress=gr.Progress()):
+    gid_str = str(gallery_id_str).strip()
+
+    # IDの抽出（"ID:123456 - Title" 形式にも対応）
+    m = re.search(r"\d+", gid_str)
+    if not m:
         return "❌ 有効なギャラリーIDを入力してください。", None
 
+    import re
+    gid = int(m.group())
     cfg = load_config()
-    session, _ = get_session_cfg()
+    session = get_session(cfg["user_agent"])
     conn = get_conn()
     rl = cfg["rate_limit"]
-    gid = int(gallery_id)
+    out_dir = cfg["download_dir"]
 
-    progress(0, desc="メタデータ取得中...")
+    # 重複スキップチェック
+    if skip_if_exists and is_downloaded(gid):
+        row = conn.execute("SELECT title, file_path FROM galleries WHERE id=?", (gid,)).fetchone()
+        title = row["title"] if row else f"Gallery {gid}"
+        fp = row["file_path"] if row else ""
+        return f"⏭️  スキップ: 「{title}」はダウンロード済みです\n  ファイル: {fp}", None
+
+    # メタデータ取得
+    progress(0.1, desc="📖 メタデータ取得中...")
     try:
         meta = scrape_gallery_metadata(session, conn, gid, rl["min_delay"], rl["max_delay"])
     except Exception as e:
         return f"❌ メタデータ取得失敗: {e}", None
 
-    meta_text = ""
-    if meta:
-        meta_text = (
-            f"📖 タイトル: {meta['title']}\n"
-            f"🎨 アーティスト: {meta['artist']}\n"
-            f"📄 ページ数: {meta['pages']}\n"
-            f"🏷️ タグ: {meta['tags'][:80]}{'...' if len(meta.get('tags','')) > 80 else ''}\n\n"
-        )
+    if not meta:
+        return f"❌ ギャラリー {gid} が見つかりませんでした (404)", None
 
-    progress(0.3, desc=f"{fmt.upper()} ダウンロード中...")
+    info = (
+        f"📖 タイトル : {meta['title']}\n"
+        f"🎨 アーティスト: {meta['artist'] or '不明'}\n"
+        f"📄 ページ数 : {meta['pages']}\n"
+        f"🏷️  タグ     : {(meta['tags'] or '')[:80]}{'...' if len(meta.get('tags',''))>80 else ''}\n"
+    )
+
+    # 進捗コールバック
+    def cb(done, total):
+        progress(0.2 + 0.7 * done / total,
+                 desc=f"⬇️  ダウンロード中... [{done}/{total}]")
+
+    # ダウンロード
+    progress(0.2, desc="⬇️  ダウンロード開始...")
     try:
         if fmt == "ZIP":
-            file_path = download_gallery_zip(
-                session, gid, cfg["download_dir"], rl["min_delay"], rl["max_delay"]
-            )
+            file_path = download_gallery_zip(session, gid, out_dir,
+                                              rl["min_delay"], rl["max_delay"], cb)
         else:
-            file_path = download_gallery_pdf(
-                session, gid, cfg["download_dir"], rl["min_delay"], rl["max_delay"]
-            )
+            file_path = download_gallery_pdf(session, gid, out_dir,
+                                              rl["min_delay"], rl["max_delay"], cb)
     except Exception as e:
-        return f"{meta_text}❌ ダウンロード失敗: {e}", None
+        return f"{info}\n❌ ダウンロード失敗: {e}", None
 
-    conn.execute("UPDATE galleries SET downloaded=1 WHERE id=?", (gid,))
+    # DB更新
+    conn.execute(
+        "UPDATE galleries SET downloaded=1, file_path=? WHERE id=?",
+        (file_path, gid)
+    )
     conn.commit()
 
-    msg = f"{meta_text}✅ 保存完了: {file_path}"
+    msg = f"{info}\n✅ 保存完了: {file_path}"
 
+    # Google Driveアップロード
     if upload_drive:
-        progress(0.9, desc="Google Drive にアップロード中...")
+        progress(0.95, desc="☁️  Google Drive アップロード中...")
         gdrive_cfg = cfg["gdrive"]
-        upload_to_gdrive(
+        link = upload_to_gdrive(
             file_path,
             folder_id=gdrive_cfg.get("folder_id", ""),
             credentials_file=gdrive_cfg.get("credentials_file", "credentials.json"),
             delete_old=True,
         )
-        msg += "\n⚠️ Google Drive連携は未設定です（credentials.json が必要）"
+        if link:
+            msg += f"\n☁️  Drive: {link}"
+        else:
+            msg += "\n⚠️  Google Drive未設定 (credentials.json が必要)"
 
-    progress(1.0, desc="完了!")
+    progress(1.0, desc="✅ 完了!")
     return msg, file_path
 
 
-def download_tab():
+def download_tab(search_candidates):
+    import re as _re
+
+    def fill_id_from_candidate(candidate):
+        """検索タブの候補選択 → IDフィールドに自動入力"""
+        if not candidate:
+            return gr.update()
+        m = _re.search(r"ID:(\d+)", candidate)
+        if m:
+            return gr.update(value=m.group(1))
+        return gr.update(value=candidate)
+
     with gr.Tab("⬇️ ダウンロード"):
         gr.Markdown("## ギャラリーをダウンロード")
         with gr.Row():
             gallery_id_input = gr.Textbox(
                 label="ギャラリーID",
-                placeholder="例: 123456",
+                placeholder="例: 503632",
                 scale=3,
             )
             fmt_radio = gr.Radio(["ZIP", "PDF"], label="保存形式", value="ZIP", scale=2)
-            upload_drive_chk = gr.Checkbox(label="Google Drive にアップロード", scale=2)
-        dl_btn = gr.Button("⬇️ ダウンロード開始", variant="primary")
-        dl_result = gr.Textbox(label="結果", lines=8, interactive=False)
-        dl_file = gr.File(label="ダウンロードしたファイル", visible=True)
+        with gr.Row():
+            skip_chk = gr.Checkbox(label="⏭️ DL済みはスキップ", value=True, scale=2)
+            upload_chk = gr.Checkbox(label="☁️ Google Driveにアップ", scale=2)
+        dl_btn = gr.Button("⬇️ ダウンロード開始", variant="primary", size="lg")
+        dl_result = gr.Textbox(label="結果", lines=10, interactive=False)
+        dl_file = gr.File(label="ダウンロードしたファイル")
+
+        # 検索タブからの候補選択で自動入力
+        search_candidates.change(
+            fill_id_from_candidate,
+            inputs=[search_candidates],
+            outputs=[gallery_id_input],
+        )
 
         dl_btn.click(
             do_download,
-            inputs=[gallery_id_input, fmt_radio, upload_drive_chk],
+            inputs=[gallery_id_input, fmt_radio, upload_chk, skip_chk],
             outputs=[dl_result, dl_file],
         )
+
     return gallery_id_input
 
 
@@ -226,38 +363,40 @@ def do_db_update(cats, pages, progress=gr.Progress()):
         return "⚠️ 少なくとも1つのカテゴリを選択してください。"
 
     cat_map = {
-        "Artists": "artists", "Groups": "groups", "Tags": "tags",
-        "Parodies": "parodies", "Characters": "characters",
+        "🎨 Artists":    "artists",
+        "👥 Groups":     "groups",
+        "🏷️ Tags":       "tags",
+        "📺 Parodies":   "parodies",
+        "👤 Characters": "characters",
     }
     selected = [cat_map[c] for c in cats if c in cat_map]
-    session, cfg = get_session_cfg()
+    session = get_session(load_config()["user_agent"])
     conn = get_conn()
-    rl = cfg["rate_limit"]
+    rl = load_config()["rate_limit"]
     log_lines = []
+    total_steps = len(selected) * pages
 
-    for ci, cat in enumerate(selected):
+    step = 0
+    for cat in selected:
         total = 0
         for page in range(1, pages + 1):
-            progress(
-                (ci * pages + page) / (len(selected) * pages),
-                desc=f"{cat} page {page}/{pages}..."
-            )
+            step += 1
+            progress(step / total_steps, desc=f"🔄 {cat} page {page}/{pages}...")
             try:
                 n = scrape_category_page(session, conn, cat, page,
                                           rl["min_delay"], rl["max_delay"])
                 total += n
+                log_lines.append(f"  {cat} p{page}: {n} 件")
                 if n == 0:
-                    log_lines.append(f"  {cat} page {page}: 結果なし（終了）")
+                    log_lines.append(f"  → {cat} 終了（結果なし）")
                     break
-                log_lines.append(f"  {cat} page {page}: {n} 件取得")
             except Exception as e:
-                log_lines.append(f"  ⚠️ {cat} page {page} エラー: {e}")
+                log_lines.append(f"  ⚠️ {cat} p{page} エラー: {e}")
                 break
-        log_lines.append(f"✅ {cat}: 合計 {total} 件保存\n")
+        log_lines.append(f"✅ {cat}: 合計 {total:,} 件保存\n")
 
-    # DB統計
-    stats = db_stats_text(conn)
-    return "\n".join(log_lines) + "\n\n" + stats
+    log_lines.append(fmt_stats())
+    return "\n".join(log_lines)
 
 
 def do_db_export(output_path):
@@ -265,26 +404,10 @@ def do_db_export(output_path):
     path = output_path.strip() or "./data/db.json"
     try:
         export_db_json(conn, path)
-        return f"✅ エクスポート完了: {path}"
+        size = Path(path).stat().st_size / 1024
+        return f"✅ エクスポート完了: {path}\n   ファイルサイズ: {size:.1f} KB"
     except Exception as e:
         return f"❌ エクスポート失敗: {e}"
-
-
-def db_stats_text(conn=None):
-    if conn is None:
-        conn = get_conn()
-    lines = ["📊 **データベース統計**"]
-    for table in ["artists", "groups", "tags", "parodies", "characters", "galleries"]:
-        try:
-            count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            downloaded = ""
-            if table == "galleries":
-                dl = conn.execute("SELECT COUNT(*) FROM galleries WHERE downloaded=1").fetchone()[0]
-                downloaded = f" (DL済み: {dl})"
-            lines.append(f"  {table}: {count} 件{downloaded}")
-        except Exception:
-            lines.append(f"  {table}: N/A")
-    return "\n".join(lines)
 
 
 def db_tab():
@@ -292,76 +415,107 @@ def db_tab():
         gr.Markdown("## データベース管理")
 
         with gr.Row():
-            with gr.Column():
-                gr.Markdown("### スクレイピング")
+            with gr.Column(scale=3):
+                gr.Markdown("### 📥 スクレイピング")
                 cat_checkboxes = gr.CheckboxGroup(
-                    ["Artists", "Groups", "Tags", "Parodies", "Characters"],
+                    ["🎨 Artists", "👥 Groups", "🏷️ Tags", "📺 Parodies", "👤 Characters"],
                     label="取得するカテゴリ",
-                    value=["Artists", "Groups"],
+                    value=["🎨 Artists", "👥 Groups"],
                 )
-                pages_slider = gr.Slider(1, 50, value=5, step=1, label="取得ページ数")
+                pages_slider = gr.Slider(1, 100, value=5, step=1, label="取得ページ数（1ページ約50件）")
                 update_btn = gr.Button("🔄 スクレイピング開始", variant="primary")
 
-            with gr.Column():
-                gr.Markdown("### JSONエクスポート")
-                export_path = gr.Textbox(
-                    label="出力ファイルパス",
-                    value="./data/db.json",
-                )
-                export_btn = gr.Button("📤 エクスポート")
-                stats_btn = gr.Button("📊 統計を表示")
+            with gr.Column(scale=2):
+                gr.Markdown("### 📤 エクスポート & 統計")
+                export_path = gr.Textbox(label="JSONエクスポート先", value="./data/db.json")
+                export_btn = gr.Button("📤 JSONエクスポート", variant="secondary")
+                stats_btn = gr.Button("📊 統計を更新", variant="secondary")
 
-        db_log = gr.Textbox(label="ログ / 統計", lines=15, interactive=False)
+        db_log = gr.Textbox(label="ログ / 統計", lines=18, interactive=False,
+                            value=fmt_stats)
 
-        update_btn.click(do_db_update, inputs=[cat_checkboxes, pages_slider], outputs=[db_log])
-        export_btn.click(do_db_export, inputs=[export_path], outputs=[db_log])
-        stats_btn.click(lambda: db_stats_text(), outputs=[db_log])
+        update_btn.click(do_db_update, [cat_checkboxes, pages_slider], [db_log])
+        export_btn.click(do_db_export, [export_path], [db_log])
+        stats_btn.click(lambda: fmt_stats(), outputs=[db_log])
 
 
 # ──────────────────────────────────────────────
 # タブ4: 📋 ダウンロード履歴
 # ──────────────────────────────────────────────
 
-def load_history():
+def load_history(filter_dl="全て"):
     conn = get_conn()
+    if filter_dl == "✅ DL済みのみ":
+        where = "WHERE downloaded=1"
+    elif filter_dl == "⬜ 未DLのみ":
+        where = "WHERE downloaded=0"
+    else:
+        where = ""
+
     rows = conn.execute(
-        "SELECT id, title, artist, pages, downloaded, created_at FROM galleries ORDER BY created_at DESC LIMIT 100"
+        f"SELECT id, title, artist, pages, downloaded, file_path, created_at "
+        f"FROM galleries {where} ORDER BY created_at DESC LIMIT 200"
     ).fetchall()
+
     if not rows:
-        return [["（履歴なし）", "", "", "", "", ""]]
-    return [[r["id"], r["title"], r["artist"] or "", r["pages"],
-             "✅" if r["downloaded"] else "❌", r["created_at"]] for r in rows]
+        return [["—", "（履歴なし）", "—", 0, "—", "—", "—"]]
+
+    return [
+        [
+            r["id"],
+            r["title"],
+            r["artist"] or "—",
+            r["pages"],
+            "✅ 済" if r["downloaded"] else "⬜ 未",
+            r["file_path"] or "—",
+            (r["created_at"] or "")[:16],
+        ]
+        for r in rows
+    ]
 
 
 def history_tab():
     with gr.Tab("📋 ダウンロード履歴"):
         gr.Markdown("## ダウンロード履歴")
-        refresh_btn = gr.Button("🔄 更新")
+        with gr.Row():
+            filter_radio = gr.Radio(
+                ["全て", "✅ DL済みのみ", "⬜ 未DLのみ"],
+                label="フィルター",
+                value="全て",
+                scale=3,
+            )
+            refresh_btn = gr.Button("🔄 更新", scale=1)
+
         history_table = gr.Dataframe(
-            headers=["ID", "タイトル", "アーティスト", "ページ数", "DL済み", "日時"],
-            datatype=["number", "str", "str", "number", "str", "str"],
+            headers=["ID", "タイトル", "アーティスト", "ページ", "状態", "ファイルパス", "登録日時"],
+            datatype=["number", "str", "str", "number", "str", "str", "str"],
             value=load_history,
             interactive=False,
             wrap=True,
+            row_count=20,
         )
-        refresh_btn.click(load_history, outputs=[history_table])
+
+        refresh_btn.click(load_history, inputs=[filter_radio], outputs=[history_table])
+        filter_radio.change(load_history, inputs=[filter_radio], outputs=[history_table])
 
 
 # ──────────────────────────────────────────────
-# アプリ組み立て
+# アプリ構築
 # ──────────────────────────────────────────────
+
+import re
 
 def build_app():
     with gr.Blocks(title="imhentai-manager") as app:
-        gr.Markdown(
-            """
-            # 📚 imhentai-manager
-            imhentai.com の検索・ダウンロード管理ツール
-            """
-        )
+        gr.HTML("""
+        <div class="app-header" style="text-align:center;padding:20px 0 10px;border-bottom:2px solid #e2e8f0;margin-bottom:12px;">
+            <h1 style="font-size:1.8rem;margin:0;">📚 imhentai-manager</h1>
+            <p style="color:#64748b;margin:4px 0 0;font-size:0.95rem;">imhentai.xxx の検索・ダウンロード管理ツール</p>
+        </div>
+        """)
 
-        search_tab()
-        download_tab()
+        candidates = search_tab()
+        download_tab(candidates)
         db_tab()
         history_tab()
 
@@ -375,9 +529,11 @@ if __name__ == "__main__":
         server_port=8080,
         share=False,
         inbrowser=False,
-        theme=gr.themes.Soft(),
-        css="""
-        .gradio-container { max-width: 1100px; margin: auto; }
-        h1 { text-align: center; }
-        """,
+        theme=gr.themes.Soft(
+            primary_hue="indigo",
+            secondary_hue="slate",
+            neutral_hue="slate",
+        ),
+        css=CUSTOM_CSS,
+        favicon_path=None,
     )
