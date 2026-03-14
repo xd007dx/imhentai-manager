@@ -461,24 +461,59 @@ def scrape_gallery_metadata(session: requests.Session, conn: sqlite3.Connection,
 
 
 def get_gallery_image_urls(session: requests.Session, gallery_id: int,
-                            min_delay: float = 1.0, max_delay: float = 3.0) -> list[str]:
-    """ギャラリーの全画像URLリストを取得する"""
+                            min_delay: float = 0.5, max_delay: float = 1.0) -> list[str]:
+    """
+    ギャラリーの全画像URLリストを取得する。
+    JavaScriptの g_th 変数からページ数と拡張子を読み取り正確なURLを生成する。
+    """
     url = f"{BASE_URL}/gallery/{gallery_id}/"
     resp = rate_limited_get(session, url, min_delay, max_delay)
     soup = BeautifulSoup(resp.text, "lxml")
 
-    image_urls = []
-    # サムネイルの data-src から取得
-    for img in soup.select("img[data-src]"):
-        src = img.get("data-src", "")
-        if not src or "cover" in src:
-            continue
-        # サムネイル(1t.jpg) → フルサイズ(1.jpg) へ変換
-        full = re.sub(r"(\d+)t\.(jpg|png|gif|webp)", r"\1.\2", src)
-        if full:
-            image_urls.append(full)
+    # ベースURL取得（カバー画像から）
+    cover = soup.select_one("img[data-src*=\'cover\']")
+    if not cover:
+        logger.warning(f"No cover image found for gallery {gallery_id}")
+        return []
 
-    logger.info(f"Found {len(image_urls)} images for gallery {gallery_id}")
+    cover_url = cover.get("data-src", "")
+    base_url = cover_url.rsplit("/", 1)[0] + "/"
+
+    # g_th から全ページの拡張子マップを取得
+    # 形式: {"1":"j,w,h", "2":"w,w,h"} → j=jpg, w=webp, p=png, g=gif
+    ext_map = {"j": "jpg", "w": "webp", "p": "png", "g": "gif"}
+    page_exts = {}
+
+    for script in soup.select("script"):
+        txt = script.get_text()
+        if "g_th" not in txt:
+            continue
+        m = re.search(r"var g_th\s*=\s*\$\.parseJSON\(\'(.+?)\'\)", txt, re.DOTALL)
+        if m:
+            try:
+                data = json.loads(m.group(1))
+                for page_num, val in data.items():
+                    fmt = val.split(",")[0]
+                    page_exts[int(page_num)] = ext_map.get(fmt, "jpg")
+            except Exception as e:
+                logger.warning(f"Failed to parse g_th: {e}")
+        break
+
+    if not page_exts:
+        # フォールバック: サムネイルURLのt除去
+        logger.warning(f"g_th not found for {gallery_id}, using thumbnail fallback")
+        image_urls = []
+        for img in soup.select("img[data-src]"):
+            src = img.get("data-src", "")
+            if "cover" in src or not src:
+                continue
+            full = re.sub(r"(\d+)t\.(jpg|png|gif|webp)", r"\1.\2", src)
+            if full != src:
+                image_urls.append(full)
+        return image_urls
+
+    image_urls = [f"{base_url}{pg}.{page_exts[pg]}" for pg in sorted(page_exts.keys())]
+    logger.info(f"Gallery {gallery_id}: {len(image_urls)} images (base: {base_url})")
     return image_urls
 
 
