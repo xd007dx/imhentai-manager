@@ -20,7 +20,8 @@ import yaml
 
 from imhentai import (
     init_db, export_db_json, db_stats,
-    get_session, scrape_category_page, scrape_gallery_metadata,
+    get_session, get_category_last_page,
+    scrape_category_page, scrape_gallery_metadata,
     search_db, download_gallery_zip, download_gallery_pdf,
     upload_to_gdrive, get_gallery_image_urls,
 )
@@ -358,7 +359,7 @@ def download_tab(search_candidates):
 # タブ3: 🗄️ DB管理
 # ──────────────────────────────────────────────
 
-def do_db_update(cats, pages, progress=gr.Progress()):
+def do_db_update(cats, progress=gr.Progress()):
     if not cats:
         return "⚠️ 少なくとも1つのカテゴリを選択してください。"
 
@@ -374,40 +375,62 @@ def do_db_update(cats, pages, progress=gr.Progress()):
     conn = get_conn()
     rl = load_config()["rate_limit"]
     log_lines = []
-    total_steps = len(selected) * pages
 
+    # まず各カテゴリの最終ページ数を取得
+    log_lines.append("📡 最終ページ数を確認中...")
+    last_pages = {}
+    for cat in selected:
+        lp = get_category_last_page(session, cat)
+        last_pages[cat] = lp
+        log_lines.append(f"  {cat}: {lp} ページ")
+
+    total_steps = sum(last_pages.values())
     step = 0
+
     for cat in selected:
         total = 0
-        for page in range(1, pages + 1):
+        max_page = last_pages[cat]
+        log_lines.append(f"\n🔄 {cat} 取得開始（全 {max_page} ページ）")
+
+        for page in range(1, max_page + 1):
             step += 1
-            progress(step / total_steps, desc=f"🔄 {cat} page {page}/{pages}...")
+            progress(
+                step / total_steps,
+                desc=f"🔄 {cat} [{page}/{max_page}]..."
+            )
             try:
                 n = scrape_category_page(session, conn, cat, page,
                                           rl["min_delay"], rl["max_delay"])
                 total += n
-                log_lines.append(f"  {cat} p{page}: {n} 件")
                 if n == 0:
-                    log_lines.append(f"  → {cat} 終了（結果なし）")
+                    log_lines.append(f"  p{page}: 結果なし → 終了")
                     break
+                # 10ページごとにログ出力
+                if page % 10 == 0 or page == max_page:
+                    log_lines.append(f"  p{page}/{max_page}: 累計 {total:,} 件")
             except Exception as e:
-                log_lines.append(f"  ⚠️ {cat} p{page} エラー: {e}")
+                log_lines.append(f"  ⚠️ p{page} エラー: {e}")
                 break
-        log_lines.append(f"✅ {cat}: 合計 {total:,} 件保存\n")
 
-    log_lines.append(fmt_stats())
+        log_lines.append(f"✅ {cat}: 合計 {total:,} 件保存")
+
+    log_lines.append("\n" + fmt_stats())
     return "\n".join(log_lines)
 
 
-def do_db_export(output_path):
+def do_db_export():
+    """DBをJSONに変換してブラウザからダウンロードできるファイルパスを返す"""
     conn = get_conn()
-    path = output_path.strip() or "./data/db.json"
+    import tempfile, os
+    # 一時ファイルに書き出す（Gradioがファイルとして返せる場所）
+    tmp_path = f"/tmp/imhentai_db_export.json"
     try:
-        export_db_json(conn, path)
-        size = Path(path).stat().st_size / 1024
-        return f"✅ エクスポート完了: {path}\n   ファイルサイズ: {size:.1f} KB"
+        export_db_json(conn, tmp_path)
+        size = Path(tmp_path).stat().st_size / 1024
+        msg = f"✅ エクスポート完了 ({size:.1f} KB) — ダウンロードボタンをクリック"
+        return msg, tmp_path
     except Exception as e:
-        return f"❌ エクスポート失敗: {e}"
+        return f"❌ エクスポート失敗: {e}", None
 
 
 def db_tab():
@@ -416,26 +439,33 @@ def db_tab():
 
         with gr.Row():
             with gr.Column(scale=3):
-                gr.Markdown("### 📥 スクレイピング")
+                gr.Markdown("### 📥 スクレイピング（全ページ自動取得）")
                 cat_checkboxes = gr.CheckboxGroup(
                     ["🎨 Artists", "👥 Groups", "🏷️ Tags", "📺 Parodies", "👤 Characters"],
                     label="取得するカテゴリ",
                     value=["🎨 Artists", "👥 Groups"],
                 )
-                pages_slider = gr.Slider(1, 100, value=5, step=1, label="取得ページ数（1ページ約50件）")
-                update_btn = gr.Button("🔄 スクレイピング開始", variant="primary")
+                gr.Markdown(
+                    "_⚠️ 全ページ取得は時間がかかります_\n"
+                    "_(Artists≈1057p / Groups≈638p / Tags≈338p / Parodies≈120p / Characters≈516p)_",
+                )
+                update_btn = gr.Button("🔄 スクレイピング開始（全ページ）", variant="primary")
 
             with gr.Column(scale=2):
                 gr.Markdown("### 📤 エクスポート & 統計")
-                export_path = gr.Textbox(label="JSONエクスポート先", value="./data/db.json")
-                export_btn = gr.Button("📤 JSONエクスポート", variant="secondary")
+                export_btn = gr.Button("📤 JSONをダウンロード", variant="secondary")
+                export_file = gr.File(label="ダウンロード", visible=True)
                 stats_btn = gr.Button("📊 統計を更新", variant="secondary")
 
         db_log = gr.Textbox(label="ログ / 統計", lines=18, interactive=False,
                             value=fmt_stats)
 
-        update_btn.click(do_db_update, [cat_checkboxes, pages_slider], [db_log])
-        export_btn.click(do_db_export, [export_path], [db_log])
+        update_btn.click(do_db_update, [cat_checkboxes], [db_log])
+        export_btn.click(
+            do_db_export,
+            inputs=[],
+            outputs=[db_log, export_file],
+        )
         stats_btn.click(lambda: fmt_stats(), outputs=[db_log])
 
 

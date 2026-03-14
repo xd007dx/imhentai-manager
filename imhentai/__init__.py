@@ -177,6 +177,23 @@ def rate_limited_get(session: requests.Session, url: str,
 # Scraper - カテゴリ
 # ──────────────────────────────────────────────
 
+def get_category_last_page(session: requests.Session, category: str) -> int:
+    """カテゴリの最終ページ番号をページネーションから取得する"""
+    if category not in CATEGORY_URL:
+        return 1
+    list_slug, _ = CATEGORY_URL[category]
+    url = f"{BASE_URL}/{list_slug}/?page=1"
+    try:
+        resp = session.get(url, timeout=20)
+        soup = BeautifulSoup(resp.text, "lxml")
+        pages = soup.select("ul.pagination li a, .pagination a")
+        nums = [int(p.get_text(strip=True)) for p in pages if p.get_text(strip=True).isdigit()]
+        return max(nums) if nums else 1
+    except Exception as e:
+        logger.warning(f"Could not get last page for {category}: {e}")
+        return 1
+
+
 def scrape_category_page(session: requests.Session, conn: sqlite3.Connection,
                           category: str, page: int = 1,
                           min_delay: float = 1.0, max_delay: float = 3.0) -> int:
